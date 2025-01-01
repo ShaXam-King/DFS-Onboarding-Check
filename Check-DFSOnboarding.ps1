@@ -268,11 +268,10 @@ function Get-MDEAccessToken {
             client_secret = "$AppSecret"
             grant_type    = 'client_credentials'
         }
-        Write-Host $oAuthUri
-        Write-Host $authBody
+
         Start-Sleep -seconds 2
         $authResponse = Invoke-RestMethod -Method Post -Uri $oAuthUri -Body $authBody
-        Write-Host $authResponse
+
         return $authResponse.access_token
     } catch {
         Write-Host $UserMessages.mdeGetMachinesTokenFailed -ForegroundColor Red
@@ -354,7 +353,7 @@ function Compare-Lists {
     return $matches, $onlyInLeft, $onlyInRight
 }
 
-function Generate-HTMLReport {
+function Export-HTMLReport {
     param (
         [array] $matches,
         [array] $onlyInLeft,
@@ -364,104 +363,9 @@ function Generate-HTMLReport {
 
     $html = Get-Content .\htmltop.txt
 
-    if ($matches) {
-        $html += "    <h2>Servers Correctly Onboarded</h2>"
-        $html += "    <table>"
-        $row = 0
-
-        $matches | ForEach-Object {
-            $Thisrecord = $_
-            $Combinedrecord = $DefenderForCloudServers | Where-Object { $_.MachineID -eq $Thisrecord.MachineID }
-            $Combinedrecord.PSObject.Properties.Remove('SideIndicator')
-            $MDEMatch = $MDEServers | Where-Object { $_.MachineID -eq $Thisrecord.MachineID }
-
-            $MDEMatch.PSObject.Properties | ForEach-Object {
-                if ((!($_.Name.Equals("Name"))) -and (!($_.Name.Equals("MachineID"))) -and (!($_.Name.Equals("SideIndicator")))) {
-                    $Combinedrecord | Add-Member -MemberType NoteProperty -Name $_.Name -Value $_.Value
-                }
-            }
-
-            if ($row -eq 0) {
-                $html += "       <tr>"
-                $Combinedrecord.PSObject.Properties | ForEach-Object {
-                    $html += "<td>$($_.Name)</td>"
-                }
-                $html += "       </tr>"
-                $row++
-            }
-
-            $html += "       <tr>"
-            $Combinedrecord.PSObject.Properties | ForEach-Object {
-                $html += "<td>$($_.Value)</td>"
-            }
-            $html += "       </tr>"
-        }
-        $html += "    </table>"
-    } else {
-        $html += "    <table><tr><td>No Servers With Matching Onboarding</td></tr></table>"
-    }
-
-    if ($onlyInLeft) {
-        $html += "    <h2>Servers Onboarded To Defender for Servers (Azure) Only</h2>"
-        $html += "    <table>"
-        $row = 0
-
-        $onlyInLeft | ForEach-Object {
-            if ($row -eq 0) {
-                $html += "       <tr>"
-                $_.PSObject.Properties | ForEach-Object {
-                    if (!($_.Name.Equals("SideIndicator"))) {
-                        $html += "<td>$($_.Name)</td>"
-                    }
-                }
-                $html += "       </tr>"
-                $row++
-            }
-
-            $html += "       <tr>"
-            $_.PSObject.Properties | ForEach-Object {
-                if (!($_.Name.Equals("SideIndicator"))) {
-                    $html += "<td>$($_.Value)</td>"
-                }
-            }
-            $html += "       </tr>"
-        }
-        $html += "    </table>"
-    } else {
-        $html += "    <h2></h2>"
-        $html += "    <table><tr><td>No Servers Onboarded To Defender For Servers Only</td></tr></table>"
-    }
-
-    if ($onlyInRight) {
-        $html += "    <h2>Servers Onboarded To Defender For Endpoint Only</h2>"
-        $html += "    <table>"
-        $row = 0
-
-        $onlyInRight | ForEach-Object {
-            if ($row -eq 0) {
-                $html += "       <tr>"
-                $_.PSObject.Properties | ForEach-Object {
-                    if (!($_.Name.Equals("SideIndicator"))) {
-                        $html += "<td>$($_.Name)</td>"
-                    }
-                }
-                $html += "       </tr>"
-                $row++
-            }
-
-            $html += "       <tr>"
-            $_.PSObject.Properties | ForEach-Object {
-                if (!($_.Name.Equals("SideIndicator"))) {
-                    $html += "<td>$($_.Value)</td>"
-                }
-            }
-            $html += "       </tr>"
-        }
-        $html += "    </table>"
-    } else {
-        $html += "    <h2></h2>"
-        $html += "    <table><tr><td>No Servers Onboarded To Defender For Endpoint Only</td></tr></table>"
-    }
+    $html += Generate-HTMLSection -Title "Servers Correctly Onboarded" -Records $matches -IncludeProperties $true
+    $html += Generate-HTMLSection -Title "Servers Onboarded To Defender for Servers (Azure) Only" -Records $onlyInRight
+    $html += Generate-HTMLSection -Title "Servers Onboarded To Defender For Endpoint Only" -Records $onlyInLeft
 
     $html += "    <h2>Output file: " + $outputFile + "</h2>"
     $html += "</body>"
@@ -470,6 +374,62 @@ function Generate-HTMLReport {
     $html | Out-File -FilePath $outputFile -Encoding UTF8
     Write-Host "The output file is located here: " $outputFile
     Start-Process $outputFile
+}
+
+function Generate-HTMLSection {
+    param (
+        [string] $Title,
+        [array] $Records,
+        [bool] $IncludeProperties = $false
+    )
+
+    $htmlSection = ""
+    if ($Records) {
+        $htmlSection += "    <h2>$Title</h2>"
+        $htmlSection += "    <table>"
+        $row = 0
+
+        $Records | ForEach-Object {
+            $currentRecord = $_
+            if ($IncludeProperties) {
+                $Combinedrecord = $DefenderForCloudServers | Where-Object { $_.MachineID -eq $currentRecord.MachineID }
+                $Combinedrecord.PSObject.Properties.Remove('SideIndicator')
+                $MDEMatch = $MDEServers | Where-Object { $_.MachineID -eq $currentRecord.MachineID }
+
+                $MDEMatch.PSObject.Properties | ForEach-Object {
+                    if ((!($_.Name.Equals("Name"))) -and (!($_.Name.Equals("MachineID"))) -and (!($_.Name.Equals("SideIndicator")))) {
+                        $Combinedrecord | Add-Member -MemberType NoteProperty -Name $_.Name -Value $_.Value
+                    }
+                }
+            } else {
+                $Combinedrecord = $currentRecord
+            }
+            # Always remove the SideIndicator property if it exists
+            if ($Combinedrecord.PSObject.Properties.Match('SideIndicator')) {
+                $Combinedrecord.PSObject.Properties.Remove('SideIndicator')
+            }
+            if ($row -eq 0) {
+                $htmlSection += "       <tr>"
+                $Combinedrecord.PSObject.Properties | ForEach-Object {
+                    $htmlSection += "<td>$($_.Name)</td>"
+                }
+                $htmlSection += "       </tr>"
+                $row++
+            }
+
+            $htmlSection += "       <tr>"
+            $Combinedrecord.PSObject.Properties | ForEach-Object {
+                $htmlSection += "<td>$($_.Value)</td>"
+            }
+            $htmlSection += "       </tr>"
+        }
+        $htmlSection += "    </table>"
+    } else {
+        $htmlSection += "    <h2>$Title</h2>"
+        $htmlSection += "    <table><tr><td>No records found</td></tr></table>"
+    }
+
+    return $htmlSection
 }
 
 function Main {
@@ -504,7 +464,7 @@ function Main {
     $matches, $onlyInLeft, $onlyInRight = Compare-Lists -DefenderForCloudServers $DefenderForCloudServers -MDEServers $MDEServers # Compare the lists
 
     $outputFile = "DFSCheck-" + (Get-Date).ToString("yyyyMMddHHmmss") + ".html" # Generate the output file name
-    Generate-HTMLReport -matches $matches -onlyInLeft $onlyInLeft -onlyInRight $onlyInRight -outputFile $outputFile # Generate the HTML report
+    Export-HTMLReport -matches $matches -onlyInLeft $onlyInLeft -onlyInRight $onlyInRight -outputFile $outputFile # Generate the HTML report
     } catch {
         Write-Host $UserMessages.mainError -ForegroundColor Red
         Write-Host "Error details: $_" -ForegroundColor Red
