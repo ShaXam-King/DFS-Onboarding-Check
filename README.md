@@ -1,2 +1,2 @@
 # DFS-Onboarding-Check
- PowerShell tool to check Defender for Servers oboarding status
+ PowerShell tool to check Defender for Servers onboarding status
