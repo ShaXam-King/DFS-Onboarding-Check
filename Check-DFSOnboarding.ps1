@@ -36,30 +36,38 @@ $AzureContext = $null  # Initialize the Azure Context variable to null
 $UserMessages = Data {
     #culture="en-US"
     ConvertFrom-StringData @'
-    moduleCheckInstalled = Checking if module is installed.
-    moduleInstalled = Module is installed.
+    moduleCheckInstalled = Checking if module is installed:
+    moduleInstalled = Module is installed
     moduleNotInstalled = Module is not installed. Installing now
-    moduleError = Please ensure that the following module(s) are installed.
-    azureConnectLoginRequired = Azure Login required.  Please check for a login window on your desktop.
-    azureConnectTokenSuccess = Retreived Azure token successfully.
-    azureConnectTokenFailed = Unable to acquire Access Token. Exiting.
-    azureSubscriptionsStart = Getting Azure Subscriptions.
-    azureSubscriptionException = An exception occurred while getting Azure Subscriptions.
-    azureSubscriptionContextNotFound = Azure Context not found.
-    azureSubscriptionCountextFound = Azure Context found.
-    azureSubscriptionNotFound = Unable to find an Azure Subscription with the signed-in account.
-    azureResourceGroupsStart = Retrieveing Resource Groups for Subscription.
-    azureResourceGroupNotFound = Unable to retrieve resources from Resource Group.
-    azureGetVirtualMachinesFailed = Failed to get Virtual Machines.
-    azureGetVirtualMachineScaleSetsFailed = Failed to get Virtual Machine Scale Sets.
-    azureGetArcMachinesFailed = Failed to get Arc Machines.
-    processMachinesStart = Reading Azure configuration for Virtual Machine.
-    processMachinesError = Failed to get Azure configuration for VM.
+    moduleError = Please ensure that the following module(s) are installed
+    azureConnectLoginRequired = Azure Login required.  Please check for a login window on your desktop
+    azureConnectTokenSuccess = Retreived Azure token successfully
+    azureConnectTokenFailed = Unable to acquire Access Token. Exiting
+    azureSubscriptionsStart = Getting Azure Subscriptions
+    azureSubscriptionException = An exception occurred while getting Azure Subscriptions
+    azureSubscriptionContextNotFound = Azure Context not found
+    azureSubscriptionCountextFound = Azure Context found
+    azureSubscriptionNotFound = Unable to find an Azure Subscription with the signed-in account
+    azureResourceGroupsStart = Retrieveing Resource Groups for Subscription:
+    azureResourceGroupNotFound = Unable to retrieve resources from Resource Group
+    azureGetVirtualMachinesFailed = Failed to get Virtual Machines
+    azureGetVirtualMachineScaleSetsFailed = Failed to get Virtual Machine Scale Sets
+    azureGetArcMachinesFailed = Failed to get Arc Machines
+    processMachinesStart = Processing (setting or reading) pricing configuration for VM 
+    processMachinesError = Failed to get pricing configuration for VM
     mdeGetMachinesTokenSuccess = Retrieved Graph API for MDE machines token successfully.
-    mdeGetMachinesTokenFailed = Failed to acquire token to MDE Endpoint - Check App Registration.
-    mdeGetMachinesFailed = Failed to retrieve machines from Defender for Endpoint.
+    mdeGetMachinesTokenFailed = Failed to acquire token to MDE Endpoint - Check App Registration
+    mdeGetMachinesFailed = Failed to retrieve machines from Defender for Endpoint
     mainError = An error occurred during the execution of the script.
     mainMidpointMessage = Defender for Servers processing complete.  Starting Defender for Endpoint processing.
+    azureTShootMessage = Check Defender for Cloud MDE Onboarding Configuration
+    azureTShootURL = https://learn.microsoft.com/en-us/azure/defender-for-cloud/enable-defender-for-endpoint
+    mdeTShootMsg = Check MDE Direct Onboarding Configuration
+    mdeTShootURL = https://learn.microsoft.com/en-us/azure/defender-for-cloud/onboard-machines-with-defender-for-endpoint
+    processNoRecordsMessage = No records found
+    correctOnboardMessage = Servers Correctly Onboarded
+    azureOnboardOnly = Servers Onboarded To Defender for Servers (Azure) Only
+    mdeOnboardOnly = Servers Onboarded To Defender For Endpoint Only
 '@
 }
 
@@ -374,7 +382,9 @@ function CreateHTMLSection {
     param (
         [string] $Title,
         [array] $Records,
-        [bool] $IncludeProperties = $false
+        [bool] $IncludeProperties = $false,
+        [string] $TSmsg,
+        [string] $TSURL
     )
 
     $htmlSection = ""
@@ -420,9 +430,15 @@ function CreateHTMLSection {
             $htmlSection += "       </tr>"
         }
         $htmlSection += "    </table>"
+        if (!($IncludeProperties)){
+            $htmlSection += "<table>"
+            $htmlSection += "<tr><td> </td></tr>"
+            $htmlSection += "<tr><td><a href=" + [char]34 + $TSURL + [char]34 + ">" + $TSmsg + "</a></td></tr>"
+            $htmlSection += "</table>"
+        }
     } else {
-        $htmlSection += "    <h2>$Title</h2>"
-        $htmlSection += "    <table><tr><td>No records found</td></tr></table>"
+        $htmlSection += "    <h2>" + $Title + "</h2>"
+        $htmlSection += "    <table><tr><td>" + $UserMessages.processNoRecordsMessage + "</td></tr></table>"
     }
 
     return $htmlSection
@@ -438,9 +454,9 @@ function Export-HTMLReport {
 
     $html = Get-Content .\htmltop.txt
 
-    $html += CreateHTMLSection -Title "Servers Correctly Onboarded" -Records $matches -IncludeProperties $true
-    $html += CreateHTMLSection -Title "Servers Onboarded To Defender for Servers (Azure) Only" -Records $onlyInLeft
-    $html += CreateHTMLSection -Title "Servers Onboarded To Defender For Endpoint Only" -Records $onlyInRight
+    $html += CreateHTMLSection -Title $UserMessages.correctOnboardMessage -Records $matches -IncludeProperties $true
+    $html += CreateHTMLSection -Title $UserMessages.azureOnboardOnly -Records $onlyInLeft -TSmsg $UserMessages.azureTShootMessage -TSURL $UserMessages.azureTShootURL
+    $html += CreateHTMLSection -Title $UserMessages.mdeOnboardOnly -Records $onlyInRight -TSmsg $UserMessages.mdeTShootMsg -TSURL $UserMessages.mdeTShootURL
 
     $html += "    <h2>Output file: " + $outputFile + "</h2>"
     $html += "</body>"
