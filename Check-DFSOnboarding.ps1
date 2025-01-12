@@ -57,8 +57,14 @@ $UserMessages = Data {
     processMachinesError = Failed to get Azure configuration for VM
     mdeGetMachinesTokenFailed = Failed to acquire token to MDE Endpoint - Check App Registration
     mdeGetMachinesFailed = Failed to retrieve machines from Defender for Endpoint
-    mainError = An error occurred during the execution of the script.
-    mainMidpointMessage = Defender for Servers processing complete.  Starting Defender for Endpoint processing.
+    mainError = An error occurred during the execution of the script
+    mainMidpointMessage = Defender for Servers processing complete.  Starting Defender for Endpoint processing
+    mainSkipMDE = Skipping MDE setup and query function calls
+    mainMDEWillBeSkipped = MDE credentials are missing.  Skipping MDE processing
+    mainAbort = Exiting script by user request due to missing MDE credentials
+    mainMissingTenantID = One or more credentials for MDE are missing from command line.  Please enter Tenant ID:
+    mainMissingClientID = One or more credentials for MDE are missing from command line.  Please enter  Client (App) ID:
+    mainMissingClientSecret = One or more credentials for MDE are missing from command line.  Please enter  Client Secret:
 '@
 }
 
@@ -432,39 +438,75 @@ function Generate-HTMLSection {
     return $htmlSection
 }
 
+function Request_MDECredentials {
+    param (
+        [string] $PromptMessage
+    )
+    Write-Host $PromptMessage -ForegroundColor Yellow
+    return Read-Host
+}
+
 function Main {
+    try {
+        Import-RequiredModules # Import required modules
+        Connect-AzureAccount # Connect to Azure account
+        $accessToken = Get-AzureAccessToken # Get Azure access token
+        $Subscriptions = Get-Subscriptions # Get all of the Azure subscriptions this user has access to
 
-    try{
-    Import-RequiredModules # Import required modules
-    Connect-AzureAccount # Connect to Azure account
-    $accessToken = Get-AzureAccessToken # Get Azure access token
-    $Subscriptions = Get-Subscriptions # Get all of the Azure subscriptions this user has access to
-
-    $DefenderForCloudServers = @() # Initialize the array to store Defender for Cloud Servers
-
-    foreach ($Subscription in $Subscriptions) { # Loop through each subscription TODO: Add a check for the subscription status
-        $SubscriptionId = $Subscription.Id # Get the subscription ID
-        $ResourceGroups = Get-AzureResourceGroups $SubscriptionId # Get the resource groups for the subscription
-        foreach ($resourceGroup in $ResourceGroups) { # Loop through each resource group
-            $resourceGroupName = $resourceGroup.ResourceGroupName # Get the resource group name
-            Write-Host "Subscription: $SubscriptionId - ResourceGroup: $resourceGroupName" # Display the subscription and resource group
-            $vmResponseMachines = Get-VirtualMachines $SubscriptionId $resourceGroupName $accessToken # Get the virtual machines in the resource group
-            $vmssResponseMachines = Get-VirtualMachineScaleSets $SubscriptionId $resourceGroupName $accessToken # Get the virtual machine scale sets in the resource group
-            $arcResponseMachines = Get-ArcMachines $SubscriptionId $resourceGroupName $accessToken # Get the Arc machines in the resource group
-            $DefenderForCloudServers += Invoke_VirtualMachineConfiguration $vmResponseMachines $SubscriptionId $accessToken # Process the virtual machines
-            $DefenderForCloudServers += Invoke_VirtualMachineConfiguration $vmssResponseMachines $SubscriptionId $accessToken # Process the virtual machine scale sets
-            $DefenderForCloudServers += Invoke_VirtualMachineConfiguration $arcResponseMachines $SubscriptionId $accessToken # Process the Arc machines
+        # Check for the presence of Tenant ID, Client ID, and Client Secret
+        if (-not $TenantId -or $TenantId.Length -eq 0) {
+            $TenantId = Request_MDECredentials -PromptMessage $UserMessages.mainMissingTenantID
         }
-    }
-    Write-Host $UserMessages.mainMidpointMessage -ForegroundColor Green # Show the midpoint message and display it in green as a marker of success
+        if (-not $ClientId -or $ClientId.Length -eq 0) {
+            $ClientId = Request_MDECredentials -PromptMessage $UserMessages.mainMissingClientID
+        }
+        if (-not $ClientSecret -or $ClientSecret.Length -eq 0) {
+            $ClientSecret = Request_MDECredentials -PromptMessage $UserMessages.mainMissingClientSecret
+        }
 
-    $MDEmachines = Get-MDEMachines # Get the machines from Defender for Endpoint
-    $MDEServers = Invoke_MDEMachinesProcessing -MDEmachines $MDEmachines # Process the machines from Defender for Endpoint
+        # If any of the credentials are still missing, ask the user if they wish to continue
+        if (-not $TenantId -or $TenantId.Length -eq 0 -or -not $ClientId -or $ClientId.Length -eq 0 -or -not $ClientSecret -or $ClientSecret.Length -eq 0) {
+            $continue = Read-Host "Credentials are missing. Do you wish to continue without MDE search? (Yes/No)"
+            if ($continue -eq "No") {
+                Write-Host $UserMessages.mainAbort -ForegroundColor Red
+                exit 1
+            } else {
+                Write-Host $UserMessages.mainMDEWillBeSkipped -ForegroundColor Yellow
+                $skipMDE = $true
+            }
+        }
 
-    $matches, $onlyInLeft, $onlyInRight = Compare-Lists -DefenderForCloudServers $DefenderForCloudServers -MDEServers $MDEServers # Compare the lists
+        $DefenderForCloudServers = @() # Initialize the array to store Defender for Cloud Servers
 
-    $outputFile = "DFSCheck-" + (Get-Date).ToString("yyyyMMddHHmmss") + ".html" # Generate the output file name
-    Export-HTMLReport -matches $matches -onlyInLeft $onlyInLeft -onlyInRight $onlyInRight -outputFile $outputFile # Generate the HTML report
+        foreach ($Subscription in $Subscriptions) { # Loop through each subscription
+            $SubscriptionId = $Subscription.Id # Get the subscription ID
+            $ResourceGroups = Get-AzureResourceGroups $SubscriptionId # Get the resource groups for the subscription
+            foreach ($resourceGroup in $ResourceGroups) { # Loop through each resource group
+                $resourceGroupName = $resourceGroup.ResourceGroupName # Get the resource group name
+                Write-Host "Subscription: $SubscriptionId - ResourceGroup: $resourceGroupName" # Display the subscription and resource group
+                $vmResponseMachines = Get-VirtualMachines $SubscriptionId $resourceGroupName $accessToken # Get the virtual machines in the resource group
+                $vmssResponseMachines = Get-VirtualMachineScaleSets $SubscriptionId $resourceGroupName $accessToken # Get the virtual machine scale sets in the resource group
+                $arcResponseMachines = Get-ArcMachines $SubscriptionId $resourceGroupName $accessToken # Get the Arc machines in the resource group
+                $DefenderForCloudServers += Invoke_VirtualMachineConfiguration $vmResponseMachines $SubscriptionId $accessToken # Process the virtual machines
+                $DefenderForCloudServers += Invoke_VirtualMachineConfiguration $vmssResponseMachines $SubscriptionId $accessToken # Process the virtual machine scale sets
+                $DefenderForCloudServers += Invoke_VirtualMachineConfiguration $arcResponseMachines $SubscriptionId $accessToken # Process the Arc machines
+            }
+        }
+        Write-Host $UserMessages.mainMidpointMessage -ForegroundColor Green # Show the midpoint message and display it in green as a marker of success
+
+        if (-not $skipMDE) {
+            $MDEmachines = Get-MDEMachines -TenantId $TenantId -ClientId $ClientId -ClientSecret $ClientSecret # Get the machines from Defender for Endpoint
+            $MDEServers = Invoke-MDEMachinesProcessing -MDEmachines $MDEmachines # Process the machines from Defender for Endpoint
+
+            $matches, $onlyInLeft, $onlyInRight = Compare-Lists -DefenderForCloudServers $DefenderForCloudServers -MDEServers $MDEServers # Compare the lists
+
+            $outputFile = "DFSCheck-" + (Get-Date).ToString("yyyyMMddHHmmss") + ".html" # Generate the output file name
+            Export-HTMLReport -matches $matches -onlyInLeft $onlyInLeft -onlyInRight $onlyInRight -outputFile $outputFile # Generate the HTML report
+        } else {
+            Write-Host $UserMessages.mainSkipMDE -ForegroundColor Yellow
+            $outputFile = "DFSCheck-" + (Get-Date).ToString("yyyyMMddHHmmss") + ".html" # Generate the output file name
+            Export-HTMLReport -matches @() -onlyInLeft $DefenderForCloudServers -onlyInRight @() -outputFile $outputFile # Generate the HTML report with only unmatched DFS machines
+        }
     } catch {
         Write-Host $UserMessages.mainError -ForegroundColor Red
         Write-Host "Error details: $_" -ForegroundColor Red
