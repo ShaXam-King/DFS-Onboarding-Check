@@ -288,8 +288,13 @@ function Get-MDEAccessToken {
 
 # Get the machines from Defender for Endpoint
 function Get-MDEMachines {
-    # Get the access token
-    $token = Get-MDEAccessToken -TenantId $TenantId -ClientId $ClientId -AppSecret $AppSecret
+    param (
+        [string] $TenantId,
+        [string] $ClientId,
+        [string] $ClientSecret
+    )
+
+    $token = Get-MDEAccessToken -TenantId $TenantId -ClientId $ClientId -ClientSecret $ClientSecret
     if (-not $token) {
         exit 1
     }
@@ -301,15 +306,21 @@ function Get-MDEMachines {
         Authorization  = "Bearer $token"
     }
 
+    $allMachines = @()
     try {
-        $response = Invoke-WebRequest -Method Get -Uri $url -Headers $headers
+        do {
+            $response = Invoke-WebRequest -Method Get -Uri $url -Headers $headers
+            $machines = ($response.Content | ConvertFrom-Json).value
+            $allMachines += $machines
+            $url = ($response.Content | ConvertFrom-Json).'@odata.nextLink'
+        } while (![string]::IsNullOrEmpty($url))
     } catch {
         Write-Host $UserMessages.mdeGetMachinesFailed -ForegroundColor Red
         Write-Host "Error from response:" $_.ErrorDetails -ForegroundColor Red
         exit 1
     }
 
-    return ($response.Content | ConvertFrom-Json).value
+    return $allMachines
 }
 
 function Invoke_MDEMachinesProcessing {
