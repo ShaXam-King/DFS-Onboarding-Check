@@ -20,6 +20,12 @@ processMachinesStart = Processing (setting or reading) pricing configuration for
 processMachinesError = Failed to get pricing configuration for VM
 mdeGetMachinesTokenFailed = Failed to acquire token to MDE Endpoint - Check App Registration
 mdeGetMachinesFailed = Failed to retrieve machines from Defender for Endpoint
-mainError = An error occurred during the execution of the script.
-mainMidpointMessage = Defender for Servers processing complete.  Starting Defender for Endpoint processing.
+mainError = An error occurred during the execution of the script
+mainMidpointMessage = Defender for Servers processing complete.  Starting Defender for Endpoint processing
+mainSkipMDE = Skipping MDE setup and query function calls
+mainMDEWillBeSkipped = MDE credentials are missing.  Skipping MDE processing
+mainAbort = Exiting script by user request due to missing MDE credentials
+mainMissingTenantID = One or more credentials for MDE are missing from command line.  Please enter Tenant ID:
+mainMissingClientID = One or more credentials for MDE are missing from command line.  Please enter  Client (App) ID:
+mainMissingClientSecret = One or more credentials for MDE are missing from command line.  Please enter  Client Secret:
 '@
