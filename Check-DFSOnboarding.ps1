@@ -27,16 +27,12 @@
 #>
 
 param (
-    [string] $TenantId = "",
-    [string] $ClientId = "",
-    [string] $AppSecret = ""
+    [string] $TenantId,
+    [string] $ClientId,
+    [string] $ClientSecret
 )
 $AzureContext = $null  # Initialize the Azure Context variable to null
 
-Import-LocalizedData -BindingVariable "UserMessages" -ErrorAction SilentlyContinue -ErrorVariable langerror
-
-if ($langerror){
-Write-Host "Problem importing local language settings - Defaulting to English"
 $UserMessages = Data {
     #culture="en-US"
     ConvertFrom-StringData @'
@@ -49,7 +45,7 @@ $UserMessages = Data {
     azureConnectTokenFailed = Unable to acquire Access Token. Exiting
     azureSubscriptionsStart = Getting Azure Subscriptions
     azureSubscriptionException = An exception occurred while getting Azure Subscriptions
-    azureSubscriptionContextNotFound = Azure Context not found - attempting refresh
+    azureSubscriptionContextNotFound = Azure Context not found
     azureSubscriptionCountextFound = Azure Context found
     azureSubscriptionNotFound = Unable to find an Azure Subscription with the signed-in account
     azureResourceGroupsStart = Retrieveing Resource Groups for Subscription:
@@ -57,47 +53,22 @@ $UserMessages = Data {
     azureGetVirtualMachinesFailed = Failed to get Virtual Machines
     azureGetVirtualMachineScaleSetsFailed = Failed to get Virtual Machine Scale Sets
     azureGetArcMachinesFailed = Failed to get Arc Machines
-    azureSubChoiceYN = Use only this subscription to compare onboarded servers? (Y/N)
-    azureSubChoiceNums = Choose Subscriptions by number (comma separated) (e.g. 1,3,4)
-    processMachinesStart = Processing (setting or reading) pricing configuration for VM 
-    processMachinesError = Failed to get pricing configuration for VM
-    mdeGetMachinesTokenSuccess = Retrieved Graph API for MDE machines token successfully.
+    processMachinesStart = Reading Azure configuration for Virtual Machine
+    processMachinesError = Failed to get Azure configuration for VM
     mdeGetMachinesTokenFailed = Failed to acquire token to MDE Endpoint - Check App Registration
     mdeGetMachinesFailed = Failed to retrieve machines from Defender for Endpoint
-    mainError = An error occurred during the execution of the script.
-    mainMidpointMessage = Defender for Servers processing complete.  Starting Defender for Endpoint processing.
-    azureTShootMessage = Check Defender for Cloud MDE Onboarding Configuration
-    azureTShootURL = https://learn.microsoft.com/en-us/azure/defender-for-cloud/enable-defender-for-endpoint
-    mdeTShootMsg = Check MDE Direct Onboarding Configuration
-    mdeTShootURL = https://learn.microsoft.com/en-us/azure/defender-for-cloud/onboard-machines-with-defender-for-endpoint
-    processNoRecordsMessage = No records found
-    correctOnboardMessage = Servers Correctly Onboarded
-    azureOnboardOnly = Servers Onboarded To Defender for Servers (Azure) Only
-    mdeOnboardOnly = Servers Onboarded To Defender For Endpoint Only
+    mainError = An error occurred during the execution of the script
+    mainMidpointMessage = Defender for Servers processing complete.  Starting Defender for Endpoint processing
+    mainSkipMDE = Skipping MDE setup and query function calls per user request
+    mainMDEWillBeSkipped = MDE credentials are missing.  Skipping MDE search per user request
+    mainAbort = Exiting script by user request due to missing MDE credentials
+    mainMissingTenantID = One or more credentials for MDE are missing from command line.  Please enter Tenant ID:
+    mainMissingClientID = One or more credentials for MDE are missing from command line.  Please enter  Client (App) ID:
+    mainMissingClientSecret = One or more credentials for MDE are missing from command line.  Please enter  Client Secret:
 '@
 }
 
-}
-
-
-function Get-RequiredParams {
-
-    <#
-    $TenantId,
-    [string] $ClientId,
-    [string] $AppSecret
-    #>
-    if ($TenantId.length -gt 0){
-
-    }
-    if ($TenantId.length -gt 0){
-
-    }
-    if ($TenantId.length -gt 0){
-
-    }
-
-} # End of Get-RequiredParams function
+Import-LocalizedData -BindingVariable "UserMessages"
 
 function Import-RequiredModules {
     $modules = @("Az.Accounts", "Az.Resources")
@@ -158,60 +129,26 @@ function Get-AzureAccessToken {
 }
 
 function Get-Subscriptions {
-    Try{
+    try {
+        Write-Host $UserMessages.azureSubscriptionsStart -ForegroundColor Blue
+        return get-azsubscription
+
+    } catch {
+        $errorMessage = $UserMessages.azureSubscriptionException
+        $errorDetails = $_.Exception.Message
+        Write-Host $errorMessage +":" $errorDetails -ForegroundColor Red
         if (!($AzureContext)) { 
             Write-Host $UserMessages.azureSubscriptionContextNotFound -ForegroundColor Yellow
             $AzureContext = Get-AzContext 
         }
-
         if ($AzureContext) {
-            Clear-Host
-            Write-Host $UserMessages.azureSubscriptionCountextFound - $AzureContext.Subscription.Id -ForegroundColor Green
-            $response = Read-Host -Prompt $UserMessages.azureSubChoiceYN
-
-            if ($response.ToLower() -eq "y") {
-                return $AzureContext.Subscription
-            }
-            else {
-                try {
-                    Clear-Host
-                    Write-Host $UserMessages.azureSubscriptionsStart -ForegroundColor Blue
-                    $FoundSubscriptions = get-azsubscription
-                    $num = 1
-                    $FoundSubscriptions | ForEach-Object {
-                        Write-host $num") Name:" $_.Name "ID:" $_.SubscriptionId
-                        $num++
-                    }
-                    $ChosenSubscriptions = @()
-                    $response = Read-Host -Prompt $UserMessages.azureSubChoiceNums
-                    
-                    $response.Split(",") | ForEach-Object {
-                        $curNum = [int]$_
-                        if ($curNum - 1 -le $FoundSubscriptions.Length){$ChosenSubscriptions += $FoundSubscriptions[$curNum -1]}
-                    }
-
-                    return $ChosenSubscriptions
-            
-                } 
-                catch {
-                    $errorMessage = $UserMessages.azureSubscriptionException
-                    $errorDetails = $_.Exception.Message
-                    Write-Host $errorMessage +":" $errorDetails -ForegroundColor Red
-                    return $null
-                }
-            }
-        }
-        else {
+            Write-Host $UserMessages.azureSubscriptionContextFound + $AzureContext.Subscription.Id -ForegroundColor Green
+            return $AzureContext.Subscription
+        } else {
             Write-Host $UserMessages.azureSubscriptionNotFound -ForegroundColor Red
             Write-Host $_.ErrorDetails -ForegroundColor Red
             throw
         }
-    }
-    Catch {
-        $errorMessage = $UserMessages.azureSubscriptionException
-        $errorDetails = $_.Exception.Message
-        Write-Host $errorMessage +":" $errorDetails -ForegroundColor Red
-        return $null
     }
 }
 
@@ -224,7 +161,6 @@ function Get-AzureResourceGroups($SubscriptionId) {
         # Handle the error silently
         $errorMessage = $UserMessages.azureResourceGroupNotFound
         $errorDetails = $_.Exception.Message
-        Write-Host $errorMessage +":" $errorDetails -ForegroundColor Red
         # Optionally log the error to a file or variable
         # Add-Content -Path "error.log" -Value "$errorMessage: $errorDetails"
         return $null
@@ -290,9 +226,75 @@ function Get-ArcMachines($SubscriptionId, $resourceGroupName, $accessToken) {
     }
     return $arcResponseMachines
 }
+function Get-OSFamily {
+    param (
+        [pscustomobject] $machine
+    )
 
+    # Initialize variables
+    $osFamily = "Unknown"
+    $osDiskPublisher = $null
+    $imageReferencePublisher = $null
+
+    # Check if the machine has a storage profile
+    if ($machine.properties -and $machine.properties.storageProfile) {
+        # Check if the machine has an OS disk
+        if ($machine.properties.storageProfile.osDisk) {
+            $osDiskPublisher = $machine.properties.storageProfile.osDisk.osType
+        }
+
+        # Check if the machine has an image reference
+        if ($machine.properties.storageProfile.imageReference) {
+            $imageReferencePublisher = $machine.properties.storageProfile.imageReference.publisher
+        }
+    }
+
+    # Determine the OS family based on the publisher values
+    # Is there a publisher for the image reference?
+    if ($imageReferencePublisher) {
+        if ($imageReferencePublisher -eq "MicrosoftWindowsServer") {
+            $osFamily = "Windows"
+        } elseif ($imageReferencePublisher -match "Canonical|RedHat|SUSE|Debian|Oracle|CentOS|Fedora|kali-linux") { # Add more Linux publishers as needed
+            $osFamily = "Linux"
+        } 
+            # Windows Desktop OS
+            elseif ($imageReferencePublisher -match "MicrosoftWindowsDesktop") {
+            $osFamily = "Windows - Desktop"
+            }
+        else {
+            # Everything else
+            Add-Content -Path "notWindowsOrLinux.log" -Value ($machine | ConvertTo-Json -Depth 20)
+            $osFamily = $machine.properties.storageProfile.imageReference.sku
+        }
+    }
+    # Is there a publisher for the OS disk?
+    elseif ($osDiskPublisher) {
+        if ($osDiskPublisher -eq "Windows") {
+            $osFamily = "Windows"
+        } elseif ($osDiskPublisher -eq "Linux") {
+            $osFamily = "Linux"
+        } else {
+            Add-Content -Path "notWindowsOrLinux.log" -Value ($machine | ConvertTo-Json -Depth 20)
+            $osFamily = $osDiskPublisher
+        }
+    } 
+    # If no publisher is found, check the OS disk name / format
+    elseif ($machine.properties -and $machine.properties.osName) {
+        # This is an Arc-enabled machine
+        if ($machine.properties.osName -match "Windows") {
+            $osFamily = "Windows"
+        } elseif ($machine.properties.osName -match "Linux") {
+            $osFamily = "Linux"
+        } else {
+            $osFamily = $machine.properties.osName
+        }
+    }
+
+    return $osFamily
+}
 function Invoke_VirtualMachineConfiguration ($machines, $SubscriptionId, $accessToken) {
     $DefenderForCloudServers = @()
+    #iterate through the machines and get the pricing configuration from Azure
     foreach ($machine in $machines) {
         $pricingUrl = "https://management.azure.com$($machine.id)/providers/Microsoft.Security/pricings/virtualMachines?api-version=2024-01-01"
         Write-Host $UserMessages.processMachines + $($machine.name) -ForegroundColor Blue
@@ -304,7 +306,7 @@ function Invoke_VirtualMachineConfiguration ($machines, $SubscriptionId, $access
                     Name = $machine.name
                     DFSGUID = $machine.identity.principalID
                     MachineID = $machine.properties.vmid
-                    OSFamily = $machine.properties.storageProfile.imageReference.sku
+                    OSFamily = Get-OSFamily -machine $machine
                     Sub = $SubscriptionId
                     RG = ''
                     DSLocation = $machine.location
@@ -335,13 +337,12 @@ function Get-MDEAccessToken {
         $authBody = [Ordered] @{
             resource      = "$resourceAppIdUri"
             client_id     = "$ClientId"
-            client_secret = "$AppSecret"
+            client_secret = "$ClientSecret"
             grant_type    = 'client_credentials'
         }
 
-        #Start-Sleep -seconds 2
+        Start-Sleep -seconds 2
         $authResponse = Invoke-RestMethod -Method Post -Uri $oAuthUri -Body $authBody
-        Write-Host $UserMessages.mdeGetMachinesTokenSuccess -ForegroundColor Green
 
         return $authResponse.access_token
     } catch {
@@ -352,36 +353,40 @@ function Get-MDEAccessToken {
 }
 
 # Get the machines from Defender for Endpoint
-function Get-MDEMachines ($MDEAccessToken){
+function Get-MDEMachines {
+    param (
+        [string] $TenantId,
+        [string] $ClientId,
+        [string] $ClientSecret
+    )
 
-    $headers = @{
-        'Content-Type' = 'application/json'
-        Accept         = 'application/json'
-        Authorization  = "Bearer $MDEAccessToken"
+    $token = Get-MDEAccessToken -TenantId $TenantId -ClientId $ClientId -ClientSecret $ClientSecret
+    if (-not $token) {
+        exit 1
     }
 
     $url = "https://api.securitycenter.microsoft.com/api/machines"
+    $headers = @{
+        'Content-Type' = 'application/json'
+        Accept         = 'application/json'
+        Authorization  = "Bearer $token"
+    }
 
-    $allResults = @()
+    $allMachines = @()
+    try {
+        do {
+            $response = Invoke-WebRequest -Method Get -Uri $url -Headers $headers
+            $machines = ($response.Content | ConvertFrom-Json).value
+            $allMachines += $machines
+            $url = ($response.Content | ConvertFrom-Json).'@odata.nextLink'
+        } while (![string]::IsNullOrEmpty($url))
+    } catch {
+        Write-Host $UserMessages.mdeGetMachinesFailed -ForegroundColor Red
+        Write-Host "Error from response:" $_.ErrorDetails -ForegroundColor Red
+        exit 1
+    }
 
-    do {
-        try {
-            $response = Invoke-RestMethod -Method Get -Uri $url -Headers $headers
-
-        } catch {
-            Write-Host $UserMessages.mdeGetMachinesFailed -ForegroundColor Red
-            Write-Host "Error from response:" $_.ErrorDetails -ForegroundColor Red
-            exit 1
-        }     
-
-        # Append the current page of data to the allData array
-        $allResults += $response.value
-
-        # Check if there is a nextLink
-        $url = $response.'@odata.nextLink'
-    } while ($url)
-    
-    return $allResults
+    return $allMachines
 }
 
 function Invoke_MDEMachinesProcessing {
@@ -416,22 +421,7 @@ function Invoke_MDEMachinesProcessing {
     return $MDEServers
 }
 
-function Compare-Lists-ByMachID {
-    param (
-        [array] $DefenderForCloudServers,
-        [array] $MDEServers
-    )
-
-    $Comparison = Compare-Object -ReferenceObject $DefenderForCloudServers -DifferenceObject $MDEServers -Property MachineID -IncludeEqual -PassThru 
-
-    $matches = $Comparison | Where-Object { $_.SideIndicator -eq "==" }
-    $onlyInLeft = $Comparison | Where-Object { $_.SideIndicator -eq "<=" }
-    $onlyInRight = $Comparison | Where-Object { $_.SideIndicator -eq "=>" }
-
-    return $matches, $onlyInLeft, $onlyInRight
-}
-
-function Compare-Lists-ByName {
+function Compare-Lists {
     param (
         [array] $DefenderForCloudServers,
         [array] $MDEServers
@@ -446,13 +436,34 @@ function Compare-Lists-ByName {
     return $matches, $onlyInLeft, $onlyInRight
 }
 
-function CreateHTMLSection {
+function Export-HTMLReport {
+    param (
+        [array] $matches,
+        [array] $onlyInLeft,
+        [array] $onlyInRight,
+        [string] $outputFile
+    )
+
+    $html = Get-Content .\htmltop.txt
+
+    $html += Generate-HTMLSection -Title "Servers Correctly Onboarded" -Records $matches -IncludeProperties $true
+    $html += Generate-HTMLSection -Title "Servers Onboarded To Defender for Servers (Azure) Only" -Records $onlyInRight
+    $html += Generate-HTMLSection -Title "Servers Onboarded To Defender For Endpoint Only" -Records $onlyInLeft
+
+    $html += "    <h2>Output file: " + $outputFile + "</h2>"
+    $html += "</body>"
+    $html += "</html>"
+
+    $html | Out-File -FilePath $outputFile -Encoding UTF8
+    Write-Host "The output file is located here: " $outputFile
+    Start-Process $outputFile
+}
+
+function Generate-HTMLSection {
     param (
         [string] $Title,
         [array] $Records,
-        [bool] $IncludeProperties = $false,
-        [string] $TSmsg,
-        [string] $TSURL
+        [bool] $IncludeProperties = $false
     )
 
     $htmlSection = ""
@@ -476,12 +487,10 @@ function CreateHTMLSection {
             } else {
                 $Combinedrecord = $currentRecord
             }
-            
             # Always remove the SideIndicator property if it exists
             if ($Combinedrecord.PSObject.Properties.Match('SideIndicator')) {
                 $Combinedrecord.PSObject.Properties.Remove('SideIndicator')
             }
-
             if ($row -eq 0) {
                 $htmlSection += "       <tr>"
                 $Combinedrecord.PSObject.Properties | ForEach-Object {
@@ -498,138 +507,89 @@ function CreateHTMLSection {
             $htmlSection += "       </tr>"
         }
         $htmlSection += "    </table>"
-        if (!($IncludeProperties)){
-            $htmlSection += "<table>"
-            $htmlSection += "<tr><td> </td></tr>"
-            $htmlSection += "<tr><td><a href=" + [char]34 + $TSURL + [char]34 + ">" + $TSmsg + "</a></td></tr>"
-            $htmlSection += "</table>"
-        }
     } else {
-        $htmlSection += "    <h2>" + $Title + "</h2>"
-        $htmlSection += "    <table><tr><td>" + $UserMessages.processNoRecordsMessage + "</td></tr></table>"
+        $htmlSection += "    <h2>$Title</h2>"
+        $htmlSection += "    <table><tr><td>No records found</td></tr></table>"
     }
 
     return $htmlSection
 }
 
-function Get-DefaultHTML {
-    $htmltop = "<!DOCTYPE html>
-    <html>
-    <head>
-        <title>Defender for Servers Onboarding Check Output</title>
-        <style>
-            table {
-                width: 100%;
-                border-collapse: collapse;
-            }
-            table, th, td {
-                border: 1px solid black;
-            }
-            th, td {
-                padding: 8px;
-                text-align: left;
-            }
-            th {
-                background-color: #f2f2f2;
-            }
-        </style>
-    </head>
-    <body>"
-    
-    return $htmltop
-}
-
-function Export-HTMLReport {
+function Request_MDECredentials {
     param (
-        [array] $matches,
-        [array] $onlyInLeft,
-        [array] $onlyInRight,
-        [string] $outputFile
+        [string] $PromptMessage
     )
-
-    if (Test-Path -Path .\htmltop.txt) {$html = Get-Content .\htmltop.txt}
-    else {
-        $html = Get-DefaultHTML
-    }
-
-    $html += CreateHTMLSection -Title $UserMessages.correctOnboardMessage -Records $matches -IncludeProperties $true
-    $html += CreateHTMLSection -Title $UserMessages.azureOnboardOnly -Records $onlyInLeft -TSmsg $UserMessages.azureTShootMessage -TSURL $UserMessages.azureTShootURL
-    $html += CreateHTMLSection -Title $UserMessages.mdeOnboardOnly -Records $onlyInRight -TSmsg $UserMessages.mdeTShootMsg -TSURL $UserMessages.mdeTShootURL
-
-    $html += "    <h2>Output file: " + $outputFile + "</h2>"
-    $html += "</body>"
-    $html += "</html>"
-
-    $html | Out-File -FilePath $outputFile -Encoding UTF8
-    Write-Host "The output file is located here: " $outputFile
-    Start-Process $outputFile
+    Write-Host $PromptMessage -ForegroundColor Yellow
+    return Read-Host
 }
 
 function Main {
-
     try {
-    #Get-RequiredParams
-    Import-RequiredModules # Import required modules
-    Connect-AzureAccount # Connect to Azure account
-    $AZaccessToken = Get-AzureAccessToken # Get Azure access token
-
-    if (($TenantId.length -gt 0) -And ($ClientId.length -gt 0) -And ($AppSecret.length -gt 0)){
-        $MDEAccessToken = Get-MDEAccessToken -TenantId $TenantId -ClientId $ClientId -AppSecret $AppSecret
-    }
-
-    if($AZaccessToken.length -gt 0){
+        Import-RequiredModules # Import required modules
+        Connect-AzureAccount # Connect to Azure account
+        $accessToken = Get-AzureAccessToken # Get Azure access token
         $Subscriptions = Get-Subscriptions # Get all of the Azure subscriptions this user has access to
+
+        # Check for the presence of Tenant ID, Client ID, and Client Secret
+        if (-not $TenantId -or $TenantId.Length -eq 0) {
+            $TenantId = Request_MDECredentials -PromptMessage $UserMessages.mainMissingTenantID
+        }
+        if (-not $ClientId -or $ClientId.Length -eq 0) {
+            $ClientId = Request_MDECredentials -PromptMessage $UserMessages.mainMissingClientID
+        }
+        if (-not $ClientSecret -or $ClientSecret.Length -eq 0) {
+            $ClientSecret = Request_MDECredentials -PromptMessage $UserMessages.mainMissingClientSecret
+        }
+
+        # If any of the credentials are still missing, ask the user if they wish to continue
+        if (-not $TenantId -or $TenantId.Length -eq 0 -or -not $ClientId -or $ClientId.Length -eq 0 -or -not $ClientSecret -or $ClientSecret.Length -eq 0) {
+            $continue = Read-Host "Credentials are missing. Do you wish to continue without MDE search? (Yes/No)"
+            if ($continue -match "No|N|no|n") {
+                Write-Host $UserMessages.mainAbort -ForegroundColor Red
+                exit 1
+            } elseif($continue -match "Yes|Y|yes|y") {
+                Write-Host $UserMessages.mainMDEWillBeSkipped -ForegroundColor Yellow
+                $skipMDE = $true
+            }
+        }
 
         $DefenderForCloudServers = @() # Initialize the array to store Defender for Cloud Servers
 
-        foreach ($Subscription in $Subscriptions) { # Loop through each subscription TODO: Add a check for the subscription status
+        foreach ($Subscription in $Subscriptions) { # Loop through each subscription
             $SubscriptionId = $Subscription.Id # Get the subscription ID
             $ResourceGroups = Get-AzureResourceGroups $SubscriptionId # Get the resource groups for the subscription
             foreach ($resourceGroup in $ResourceGroups) { # Loop through each resource group
                 $resourceGroupName = $resourceGroup.ResourceGroupName # Get the resource group name
                 Write-Host "Subscription: $SubscriptionId - ResourceGroup: $resourceGroupName" # Display the subscription and resource group
-                $vmResponseMachines = Get-VirtualMachines $SubscriptionId $resourceGroupName $AZaccessToken # Get the virtual machines in the resource group
-                $vmssResponseMachines = Get-VirtualMachineScaleSets $SubscriptionId $resourceGroupName $AZaccessToken # Get the virtual machine scale sets in the resource group
-                $arcResponseMachines = Get-ArcMachines $SubscriptionId $resourceGroupName $AZaccessToken # Get the Arc machines in the resource group
-                $DefenderForCloudServers += Invoke_VirtualMachineConfiguration $vmResponseMachines $SubscriptionId $AZaccessToken # Process the virtual machines
-                $DefenderForCloudServers += Invoke_VirtualMachineConfiguration $vmssResponseMachines $SubscriptionId $AZaccessToken # Process the virtual machine scale sets
-                $DefenderForCloudServers += Invoke_VirtualMachineConfiguration $arcResponseMachines $SubscriptionId $AZaccessToken # Process the Arc machines
+                $vmResponseMachines = Get-VirtualMachines $SubscriptionId $resourceGroupName $accessToken # Get the virtual machines in the resource group
+                $vmssResponseMachines = Get-VirtualMachineScaleSets $SubscriptionId $resourceGroupName $accessToken # Get the virtual machine scale sets in the resource group
+                $arcResponseMachines = Get-ArcMachines $SubscriptionId $resourceGroupName $accessToken # Get the Arc machines in the resource group
+                $DefenderForCloudServers += Invoke_VirtualMachineConfiguration $vmResponseMachines $SubscriptionId $accessToken # Process the virtual machines
+                $DefenderForCloudServers += Invoke_VirtualMachineConfiguration $vmssResponseMachines $SubscriptionId $accessToken # Process the virtual machine scale sets
+                $DefenderForCloudServers += Invoke_VirtualMachineConfiguration $arcResponseMachines $SubscriptionId $accessToken # Process the Arc machines
             }
         }
-    }
+        Write-Host $UserMessages.mainMidpointMessage -ForegroundColor Green # Show the midpoint message and display it in green as a marker of success
 
-    Write-Host $UserMessages.mainMidpointMessage -ForegroundColor Green # Show the midpoint message and display it in green as a marker of success
+        if (-not $skipMDE) {
+            $MDEmachines = Get-MDEMachines -TenantId $TenantId -ClientId $ClientId -ClientSecret $ClientSecret # Get the machines from Defender for Endpoint
+            $MDEServers = Invoke_MDEMachinesProcessing -MDEmachines $MDEmachines # Process the machines from Defender for Endpoint
 
-    if ($MDEAccessToken.length -gt 0){
-        $MDEmachines = Get-MDEMachines $MDEAccessToken # Get the machines from Defender for Endpoint
-        $MDEServers = Invoke_MDEMachinesProcessing -MDEmachines $MDEmachines # Process the machines from Defender for Endpoint
-    }
+            $matches, $onlyInLeft, $onlyInRight = Compare-Lists -DefenderForCloudServers $DefenderForCloudServers -MDEServers $MDEServers # Compare the lists
 
-    $outputFile = "DFSCheck-" + (Get-Date).ToString("yyyyMMddHHmmss") + ".html" # Generate the output file name
-
-    if (($DefenderForCloudServers.length -gt 0) -and ($MDEServers.length -gt 0)){ # We need at least 1 server in both sides to compare
-
-        $MachIDmatches, $MachIDonlyInMDC, $MachIDonlyInMDE = Compare-Lists-ByMachID -DefenderForCloudServers $DefenderForCloudServers -MDEServers $MDEServers # Compare the lists
-        #Namematches, $NameonlyInLeft, $NameonlyInRight = Compare-Lists-ByName -DefenderForCloudServers $DefenderForCloudServers -MDEServers $MDEServers # Compare the lists
-
-        Export-HTMLReport -matches $MachIDmatches -onlyInLeft $MachIDonlyInMDC -onlyInRight $MachIDonlyInMDE -outputFile $outputFile # Generate the HTML report
-    }
-    else { # We will generate the report having only the list where servers were found
-        if ($DefenderForCloudServers.length -eq 0){
-            Export-HTMLReport -matches $null -onlyInLeft $null -onlyInRight $MDEServers -outputFile $outputFile # Generate the HTML report
+            $outputFile = "DFSCheck-" + (Get-Date).ToString("yyyyMMddHHmmss") + ".html" # Generate the output file name
+            Export-HTMLReport -matches $matches -onlyInLeft $onlyInLeft -onlyInRight $onlyInRight -outputFile $outputFile # Generate the HTML report
+        } else {
+            Write-Host $UserMessages.mainSkipMDE -ForegroundColor Yellow
+            $outputFile = "DFSCheck-" + (Get-Date).ToString("yyyyMMddHHmmss") + ".html" # Generate the output file name
+            Export-HTMLReport -matches @() -onlyInLeft $DefenderForCloudServers -onlyInRight @() -outputFile $outputFile # Generate the HTML report with only unmatched DFS machines
         }
-        else {
-            Export-HTMLReport -matches $null -onlyInLeft $DefenderForCloudServers -onlyInRight $null -outputFile $outputFile # Generate the HTML report
-        }
-    }
-
     } catch {
         Write-Host $UserMessages.mainError -ForegroundColor Red
         Write-Host "Error details: $_" -ForegroundColor Red
         # Optionally log the error to a file
         # Add-Content -Path "error.log" -Value "Error details: $_"
     }
-    
 }
 
 Main
