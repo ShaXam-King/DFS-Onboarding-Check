@@ -29,7 +29,7 @@
 param (
     [string] $TenantId,
     [string] $ClientId,
-    [string] $AppSecret
+    [string] $ClientSecret
 )
 $AzureContext = $null  # Initialize the Azure Context variable to null
 
@@ -59,8 +59,8 @@ $UserMessages = Data {
     mdeGetMachinesFailed = Failed to retrieve machines from Defender for Endpoint
     mainError = An error occurred during the execution of the script
     mainMidpointMessage = Defender for Servers processing complete.  Starting Defender for Endpoint processing
-    mainSkipMDE = Skipping MDE setup and query function calls
-    mainMDEWillBeSkipped = MDE credentials are missing.  Skipping MDE processing
+    mainSkipMDE = Skipping MDE setup and query function calls per user request
+    mainMDEWillBeSkipped = MDE credentials are missing.  Skipping MDE search per user request
     mainAbort = Exiting script by user request due to missing MDE credentials
     mainMissingTenantID = One or more credentials for MDE are missing from command line.  Please enter Tenant ID:
     mainMissingClientID = One or more credentials for MDE are missing from command line.  Please enter  Client (App) ID:
@@ -226,9 +226,75 @@ function Get-ArcMachines($SubscriptionId, $resourceGroupName, $accessToken) {
     }
     return $arcResponseMachines
 }
+function Get-OSFamily {
+    param (
+        [pscustomobject] $machine
+    )
 
+    # Initialize variables
+    $osFamily = "Unknown"
+    $osDiskPublisher = $null
+    $imageReferencePublisher = $null
+
+    # Check if the machine has a storage profile
+    if ($machine.properties -and $machine.properties.storageProfile) {
+        # Check if the machine has an OS disk
+        if ($machine.properties.storageProfile.osDisk) {
+            $osDiskPublisher = $machine.properties.storageProfile.osDisk.osType
+        }
+
+        # Check if the machine has an image reference
+        if ($machine.properties.storageProfile.imageReference) {
+            $imageReferencePublisher = $machine.properties.storageProfile.imageReference.publisher
+        }
+    }
+
+    # Determine the OS family based on the publisher values
+    # Is there a publisher for the image reference?
+    if ($imageReferencePublisher) {
+        if ($imageReferencePublisher -eq "MicrosoftWindowsServer") {
+            $osFamily = "Windows"
+        } elseif ($imageReferencePublisher -match "Canonical|RedHat|SUSE|Debian|Oracle|CentOS|Fedora|kali-linux") { # Add more Linux publishers as needed
+            $osFamily = "Linux"
+        } 
+            # Windows Desktop OS
+            elseif ($imageReferencePublisher -match "MicrosoftWindowsDesktop") {
+            $osFamily = "Windows - Desktop"
+            }
+        else {
+            # Everything else
+            Add-Content -Path "notWindowsOrLinux.log" -Value ($machine | ConvertTo-Json -Depth 20)
+            $osFamily = $machine.properties.storageProfile.imageReference.sku
+        }
+    }
+    # Is there a publisher for the OS disk?
+    elseif ($osDiskPublisher) {
+        if ($osDiskPublisher -eq "Windows") {
+            $osFamily = "Windows"
+        } elseif ($osDiskPublisher -eq "Linux") {
+            $osFamily = "Linux"
+        } else {
+            Add-Content -Path "notWindowsOrLinux.log" -Value ($machine | ConvertTo-Json -Depth 20)
+            $osFamily = $osDiskPublisher
+        }
+    } 
+    # If no publisher is found, check the OS disk name / format
+    elseif ($machine.properties -and $machine.properties.osName) {
+        # This is an Arc-enabled machine
+        if ($machine.properties.osName -match "Windows") {
+            $osFamily = "Windows"
+        } elseif ($machine.properties.osName -match "Linux") {
+            $osFamily = "Linux"
+        } else {
+            $osFamily = $machine.properties.osName
+        }
+    }
+
+    return $osFamily
+}
 function Invoke_VirtualMachineConfiguration ($machines, $SubscriptionId, $accessToken) {
     $DefenderForCloudServers = @()
+    #iterate through the machines and get the pricing configuration from Azure
     foreach ($machine in $machines) {
         $pricingUrl = "https://management.azure.com$($machine.id)/providers/Microsoft.Security/pricings/virtualMachines?api-version=2024-01-01"
         Write-Host $UserMessages.processMachines + $($machine.name) -ForegroundColor Blue
@@ -240,7 +306,7 @@ function Invoke_VirtualMachineConfiguration ($machines, $SubscriptionId, $access
                     Name = $machine.name
                     DFSGUID = $machine.identity.principalID
                     MachineID = $machine.properties.vmid
-                    OSFamily = $machine.properties.storageProfile.imageReference.sku
+                    OSFamily = Get-OSFamily -machine $machine
                     Sub = $SubscriptionId
                     RG = ''
                     DSLocation = $machine.location
@@ -271,7 +337,7 @@ function Get-MDEAccessToken {
         $authBody = [Ordered] @{
             resource      = "$resourceAppIdUri"
             client_id     = "$ClientId"
-            client_secret = "$AppSecret"
+            client_secret = "$ClientSecret"
             grant_type    = 'client_credentials'
         }
 
@@ -478,10 +544,10 @@ function Main {
         # If any of the credentials are still missing, ask the user if they wish to continue
         if (-not $TenantId -or $TenantId.Length -eq 0 -or -not $ClientId -or $ClientId.Length -eq 0 -or -not $ClientSecret -or $ClientSecret.Length -eq 0) {
             $continue = Read-Host "Credentials are missing. Do you wish to continue without MDE search? (Yes/No)"
-            if ($continue -eq "No") {
+            if ($continue -match "No|N|no|n") {
                 Write-Host $UserMessages.mainAbort -ForegroundColor Red
                 exit 1
-            } else {
+            } elseif($continue -match "Yes|Y|yes|y") {
                 Write-Host $UserMessages.mainMDEWillBeSkipped -ForegroundColor Yellow
                 $skipMDE = $true
             }
@@ -507,7 +573,7 @@ function Main {
 
         if (-not $skipMDE) {
             $MDEmachines = Get-MDEMachines -TenantId $TenantId -ClientId $ClientId -ClientSecret $ClientSecret # Get the machines from Defender for Endpoint
-            $MDEServers = Invoke-MDEMachinesProcessing -MDEmachines $MDEmachines # Process the machines from Defender for Endpoint
+            $MDEServers = Invoke_MDEMachinesProcessing -MDEmachines $MDEmachines # Process the machines from Defender for Endpoint
 
             $matches, $onlyInLeft, $onlyInRight = Compare-Lists -DefenderForCloudServers $DefenderForCloudServers -MDEServers $MDEServers # Compare the lists
 
