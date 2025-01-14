@@ -33,10 +33,9 @@ param (
 )
 $AzureContext = $null  # Initialize the Azure Context variable to null
 
-try {
-    Import-LocalizedData -BindingVariable "UserMessages"
-}
-catch {
+Import-LocalizedData -BindingVariable "UserMessages" -ErrorAction SilentlyContinue -ErrorVariable langerror
+
+if ($langerror){
 Write-Host "Problem importing local language settings - Defaulting to English"
 $UserMessages = Data {
     #culture="en-US"
@@ -50,7 +49,7 @@ $UserMessages = Data {
     azureConnectTokenFailed = Unable to acquire Access Token. Exiting
     azureSubscriptionsStart = Getting Azure Subscriptions
     azureSubscriptionException = An exception occurred while getting Azure Subscriptions
-    azureSubscriptionContextNotFound = Azure Context not found
+    azureSubscriptionContextNotFound = Azure Context not found - attempting refresh
     azureSubscriptionCountextFound = Azure Context found
     azureSubscriptionNotFound = Unable to find an Azure Subscription with the signed-in account
     azureResourceGroupsStart = Retrieveing Resource Groups for Subscription:
@@ -58,7 +57,7 @@ $UserMessages = Data {
     azureGetVirtualMachinesFailed = Failed to get Virtual Machines
     azureGetVirtualMachineScaleSetsFailed = Failed to get Virtual Machine Scale Sets
     azureGetArcMachinesFailed = Failed to get Arc Machines
-    azureSubChoiceYN = Use only this subscription to compare onboarded servers (Y/N)
+    azureSubChoiceYN = Use only this subscription to compare onboarded servers? (Y/N)
     azureSubChoiceNums = Choose Subscriptions by number (comma separated) (e.g. 1,3,4)
     processMachinesStart = Processing (setting or reading) pricing configuration for VM 
     processMachinesError = Failed to get pricing configuration for VM
@@ -78,7 +77,7 @@ $UserMessages = Data {
 '@
 }
 
-} # End of Try Catch
+}
 
 
 function Get-RequiredParams {
@@ -166,7 +165,8 @@ function Get-Subscriptions {
         }
 
         if ($AzureContext) {
-            Write-Host $UserMessages.azureSubscriptionContextFound + $AzureContext.Subscription.Id -ForegroundColor Green
+            Clear-Host
+            Write-Host $UserMessages.azureSubscriptionCountextFound - $AzureContext.Subscription.Id -ForegroundColor Green
             $response = Read-Host -Prompt $UserMessages.azureSubChoiceYN
 
             if ($response.ToLower() -eq "y") {
@@ -174,11 +174,12 @@ function Get-Subscriptions {
             }
             else {
                 try {
+                    Clear-Host
                     Write-Host $UserMessages.azureSubscriptionsStart -ForegroundColor Blue
                     $FoundSubscriptions = get-azsubscription
                     $num = 1
                     $FoundSubscriptions | ForEach-Object {
-                        Write-host $num + ") Name:" + $_.Name + " ID:" + $_.SubscriptionId
+                        Write-host $num") Name:" $_.Name "ID:" $_.SubscriptionId
                         $num++
                     }
                     $ChosenSubscriptions = @()
@@ -186,7 +187,7 @@ function Get-Subscriptions {
                     
                     $response.Split(",") | ForEach-Object {
                         $curNum = [int]$_
-                        if ($curNum - 1 -le $FoundSubscriptions.Length){$ChosenSubscriptions += $FoundSubscriptions[$curNum -1].SubscriptionId}
+                        if ($curNum - 1 -le $FoundSubscriptions.Length){$ChosenSubscriptions += $FoundSubscriptions[$curNum -1]}
                     }
 
                     return $ChosenSubscriptions
@@ -499,6 +500,33 @@ function CreateHTMLSection {
     return $htmlSection
 }
 
+function Get-DefaultHTML {
+    $htmltop = "<!DOCTYPE html>
+    <html>
+    <head>
+        <title>Defender for Servers Onboarding Check Output</title>
+        <style>
+            table {
+                width: 100%;
+                border-collapse: collapse;
+            }
+            table, th, td {
+                border: 1px solid black;
+            }
+            th, td {
+                padding: 8px;
+                text-align: left;
+            }
+            th {
+                background-color: #f2f2f2;
+            }
+        </style>
+    </head>
+    <body>"
+    
+    return $htmltop
+}
+
 function Export-HTMLReport {
     param (
         [array] $matches,
@@ -507,7 +535,10 @@ function Export-HTMLReport {
         [string] $outputFile
     )
 
-    $html = Get-Content .\htmltop.txt
+    if (Test-Path -Path .\htmltop.txt) {$html = Get-Content .\htmltop.txt}
+    else {
+        $html = Get-DefaultHTML
+    }
 
     $html += CreateHTMLSection -Title $UserMessages.correctOnboardMessage -Records $matches -IncludeProperties $true
     $html += CreateHTMLSection -Title $UserMessages.azureOnboardOnly -Records $onlyInLeft -TSmsg $UserMessages.azureTShootMessage -TSURL $UserMessages.azureTShootURL
