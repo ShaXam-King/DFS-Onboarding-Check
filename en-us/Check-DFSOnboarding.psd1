@@ -23,4 +23,12 @@ mdeGetMachinesTokenFailed = Failed to acquire token to MDE Endpoint - Check App 
 mdeGetMachinesFailed = Failed to retrieve machines from Defender for Endpoint
 mainError = An error occurred during the execution of the script.
 mainMidpointMessage = Defender for Servers processing complete.  Starting Defender for Endpoint processing.
+azureTShootMessage = "Check Defender for Cloud MDE Onboarding Configuration"
+azureTShootURL = "https://learn.microsoft.com/en-us/azure/defender-for-cloud/enable-defender-for-endpoint"
+mdeTShootMsg = "Check MDE Direct Onboarding Configuration"
+mdeTShootURL = "https://learn.microsoft.com/en-us/azure/defender-for-cloud/onboard-machines-with-defender-for-endpoint"
+processNoRecordsMessage = "No records found"
+correctOnboardMessage = "Servers Correctly Onboarded"
+azureOnboardOnly = "Servers Onboarded To Defender for Servers (Azure) Only"
+mdeOnboardOnly = "Servers Onboarded To Defender For Endpoint Only"
 '@

@@ -60,8 +60,26 @@ $UserMessages = Data {
     mdeGetMachinesFailed = Failed to retrieve machines from Defender for Endpoint.
     mainError = An error occurred during the execution of the script.
     mainMidpointMessage = Defender for Servers processing complete.  Starting Defender for Endpoint processing.
+    azureTShootMessage = "Check Defender for Cloud MDE Onboarding Configuration"
+    azureTShootURL = "https://learn.microsoft.com/en-us/azure/defender-for-cloud/enable-defender-for-endpoint"
+    mdeTShootMsg = "Check MDE Direct Onboarding Configuration"
+    mdeTShootURL = "https://learn.microsoft.com/en-us/azure/defender-for-cloud/onboard-machines-with-defender-for-endpoint"
+    processNoRecordsMessage = "No records found"
+    correctOnboardMessage = "Servers Correctly Onboarded"
+    azureOnboardOnly = "Servers Onboarded To Defender for Servers (Azure) Only"
+    mdeOnboardOnly = "Servers Onboarded To Defender For Endpoint Only"
 '@
 }
+
+# Will add these to UserMessages
+$MDCTSMsg = "Check Defender for Cloud MDE Onboarding Configuration"
+$MDCTSURL = "https://learn.microsoft.com/en-us/azure/defender-for-cloud/enable-defender-for-endpoint"
+$MDETSMsg = "Check MDE Direct Onboarding Configuration"
+$MDETSURL = "https://learn.microsoft.com/en-us/azure/defender-for-cloud/onboard-machines-with-defender-for-endpoint"
+$norecords = "No records found"
+$Correctmsg = "Servers Correctly Onboarded"
+$MDCOnly = "Servers Onboarded To Defender for Servers (Azure) Only"
+$MDEOnly = "Servers Onboarded To Defender For Endpoint Only"
 
 Import-LocalizedData -BindingVariable "UserMessages"
 
@@ -374,7 +392,9 @@ function CreateHTMLSection {
     param (
         [string] $Title,
         [array] $Records,
-        [bool] $IncludeProperties = $false
+        [bool] $IncludeProperties = $false,
+        [string] $TSmsg,
+        [string] $TSURL
     )
 
     $htmlSection = ""
@@ -420,9 +440,15 @@ function CreateHTMLSection {
             $htmlSection += "       </tr>"
         }
         $htmlSection += "    </table>"
+        if (!($IncludeProperties)){
+            $htmlSection += "<table>"
+            $htmlSection += "<tr><td> </td></tr>"
+            $htmlSection += "<tr><td><a href=" + [char]34 + $TSURL + [char]34 + ">" + $TSmsg + "</a></td></tr>"
+            $htmlSection += "</table>"
+        }
     } else {
-        $htmlSection += "    <h2>$Title</h2>"
-        $htmlSection += "    <table><tr><td>No records found</td></tr></table>"
+        $htmlSection += "    <h2>" + $Title + "</h2>"
+        $htmlSection += "    <table><tr><td>" + $norecords + "</td></tr></table>"
     }
 
     return $htmlSection
@@ -438,9 +464,9 @@ function Export-HTMLReport {
 
     $html = Get-Content .\htmltop.txt
 
-    $html += CreateHTMLSection -Title "Servers Correctly Onboarded" -Records $matches -IncludeProperties $true
-    $html += CreateHTMLSection -Title "Servers Onboarded To Defender for Servers (Azure) Only" -Records $onlyInLeft
-    $html += CreateHTMLSection -Title "Servers Onboarded To Defender For Endpoint Only" -Records $onlyInRight
+    $html += CreateHTMLSection -Title $Correctmsg -Records $matches -IncludeProperties $true
+    $html += CreateHTMLSection -Title $MDCOnly -Records $onlyInLeft -TSmsg $MDCTSMsg -TSURL $MDCTSURL
+    $html += CreateHTMLSection -Title $MDEOnly -Records $onlyInRight -TSmsg $MDETSMsg -TSURL $MDETSURL
 
     $html += "    <h2>Output file: " + $outputFile + "</h2>"
     $html += "</body>"

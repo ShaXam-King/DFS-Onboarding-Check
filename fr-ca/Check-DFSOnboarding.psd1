@@ -23,4 +23,12 @@ mdeGetMachinesTokenSuccess = Récupération réussie du jeton de l'API Graph pou
 mdeGetMachinesFailed = Échec de la récupération des machines de Defender pour Endpoint
 mainError = Une erreur s'est produite lors de l'exécution du script.
 mainMidpointMessage = Traitement de Defender pour les serveurs terminé. Début du traitement de Defender pour Endpoint.
+azureTShootMessage = ""
+azureTShootURL = "https://learn.microsoft.com/en-us/azure/defender-for-cloud/enable-defender-for-endpoint"
+mdeTShootMsg = ""
+mdeTShootURL = "https://learn.microsoft.com/en-us/azure/defender-for-cloud/onboard-machines-with-defender-for-endpoint"
+processNoRecordsMessage = ""
+correctOnboardMessage = ""
+azureOnboardOnly = ""
+mdeOnboardOnly = ""
 '@
