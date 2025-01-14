@@ -29,7 +29,7 @@
 param (
     [string] $TenantId = "",
     [string] $ClientId = "",
-    [string] $AppSecret = ""
+    [string] $ClientSecret = ""
 )
 $AzureContext = $null  # Initialize the Azure Context variable to null
 
@@ -66,6 +66,8 @@ $UserMessages = Data {
     mdeGetMachinesFailed = Failed to retrieve machines from Defender for Endpoint
     mainError = An error occurred during the execution of the script.
     mainMidpointMessage = Defender for Servers processing complete.  Starting Defender for Endpoint processing.
+    mainSkipMDE = Skipping MDE setup and query function calls per user request
+    mainMDEWillBeSkipped = MDE credentials are missing. Skipping MDE search per user request
     azureTShootMessage = Check Defender for Cloud MDE Onboarding Configuration
     azureTShootURL = https://learn.microsoft.com/en-us/azure/defender-for-cloud/enable-defender-for-endpoint
     mdeTShootMsg = Check MDE Direct Onboarding Configuration
@@ -85,7 +87,7 @@ function Get-RequiredParams {
     <#
     $TenantId,
     [string] $ClientId,
-    [string] $AppSecret
+    [string] $ClientSecret
     #>
     if ($TenantId.length -gt 0){
 
@@ -291,11 +293,78 @@ function Get-ArcMachines($SubscriptionId, $resourceGroupName, $accessToken) {
     return $arcResponseMachines
 }
 
+function Get-OSFamily {
+    param (
+        [pscustomobject] $machine
+    )
+
+    # Initialize variables
+    $osFamily = "Unknown"
+    $osDiskPublisher = $null
+    $imageReferencePublisher = $null
+
+    # Check if the machine has a storage profile
+    if ($machine.properties -and $machine.properties.storageProfile) {
+        # Check if the machine has an OS disk
+        if ($machine.properties.storageProfile.osDisk) {
+            $osDiskPublisher = $machine.properties.storageProfile.osDisk.osType
+        }
+
+        # Check if the machine has an image reference
+        if ($machine.properties.storageProfile.imageReference) {
+            $imageReferencePublisher = $machine.properties.storageProfile.imageReference.publisher
+        }
+    }
+
+    # Determine the OS family based on the publisher values
+    # Is there a publisher for the image reference?
+    if ($imageReferencePublisher) {
+        if ($imageReferencePublisher -eq "MicrosoftWindowsServer") {
+            $osFamily = "Windows"
+        } elseif ($imageReferencePublisher -match "Canonical|RedHat|SUSE|Debian|Oracle|CentOS|Fedora|kali-linux") { # Add more Linux publishers as needed
+            $osFamily = "Linux"
+        } 
+            # Windows Desktop OS
+            elseif ($imageReferencePublisher -match "MicrosoftWindowsDesktop") {
+            $osFamily = "Windows - Desktop"
+            }
+        else {
+            # Everything else
+            Add-Content -Path "notWindowsOrLinux.log" -Value ($machine | ConvertTo-Json -Depth 20)
+            $osFamily = $machine.properties.storageProfile.imageReference.sku
+        }
+    }
+    # Is there a publisher for the OS disk?
+    elseif ($osDiskPublisher) {
+        if ($osDiskPublisher -eq "Windows") {
+            $osFamily = "Windows"
+        } elseif ($osDiskPublisher -eq "Linux") {
+            $osFamily = "Linux"
+        } else {
+            Add-Content -Path "notWindowsOrLinux.log" -Value ($machine | ConvertTo-Json -Depth 20)
+            $osFamily = $osDiskPublisher
+        }
+    } 
+    # If no publisher is found, check the OS disk name / format
+    elseif ($machine.properties -and $machine.properties.osName) {
+        # This is an Arc-enabled machine
+        if ($machine.properties.osName -match "Windows") {
+            $osFamily = "Windows"
+        } elseif ($machine.properties.osName -match "Linux") {
+            $osFamily = "Linux"
+        } else {
+            $osFamily = $machine.properties.osName
+        }
+    }
+
+    return $osFamily
+}
+
 function Invoke_VirtualMachineConfiguration ($machines, $SubscriptionId, $accessToken) {
     $DefenderForCloudServers = @()
     foreach ($machine in $machines) {
         $pricingUrl = "https://management.azure.com$($machine.id)/providers/Microsoft.Security/pricings/virtualMachines?api-version=2024-01-01"
-        Write-Host $UserMessages.processMachines + $($machine.name) -ForegroundColor Blue
+        Write-Host $UserMessages.processMachinesStart + $($machine.name) -ForegroundColor Blue
         try {
             # Get the pricing configuration for the Virtual Machine from Azure
             $pricingResponse = Invoke-RestMethod -Method Get -Uri $pricingUrl -Headers @{ Authorization = "Bearer $accessToken" } -ContentType "application/json" -TimeoutSec 120 -ErrorAction SilentlyContinue
@@ -304,7 +373,7 @@ function Invoke_VirtualMachineConfiguration ($machines, $SubscriptionId, $access
                     Name = $machine.name
                     DFSGUID = $machine.identity.principalID
                     MachineID = $machine.properties.vmid
-                    OSFamily = $machine.properties.storageProfile.imageReference.sku
+                    OSFamily = Get-OSFamily -machine $machine
                     Sub = $SubscriptionId
                     RG = ''
                     DSLocation = $machine.location
@@ -335,7 +404,7 @@ function Get-MDEAccessToken {
         $authBody = [Ordered] @{
             resource      = "$resourceAppIdUri"
             client_id     = "$ClientId"
-            client_secret = "$AppSecret"
+            client_secret = "$ClientSecret"
             grant_type    = 'client_credentials'
         }
 
@@ -586,8 +655,8 @@ function Main {
     Connect-AzureAccount # Connect to Azure account
     $AZaccessToken = Get-AzureAccessToken # Get Azure access token
 
-    if (($TenantId.length -gt 0) -And ($ClientId.length -gt 0) -And ($AppSecret.length -gt 0)){
-        $MDEAccessToken = Get-MDEAccessToken -TenantId $TenantId -ClientId $ClientId -AppSecret $AppSecret
+    if (($TenantId.length -gt 0) -And ($ClientId.length -gt 0) -And ($ClientSecret.length -gt 0)){
+        $MDEAccessToken = Get-MDEAccessToken -TenantId $TenantId -ClientId $ClientId -AppSecret $ClientSecret
     }
 
     if($AZaccessToken.length -gt 0){
