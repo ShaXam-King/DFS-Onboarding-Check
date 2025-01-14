@@ -19,6 +19,7 @@ azureGetArcMachinesFailed = Échec de la récupération des machines Arc
 processMachinesStart = Traitement (configuration ou lecture) de la configuration des prix pour la VM
 processMachinesError = Échec de la récupération de la configuration des prix pour la VM
 mdeGetMachinesTokenFailed = Échec de l'acquisition du jeton pour le point de terminaison MDE - Vérifiez l'enregistrement de l'application
+mdeGetMachinesTokenSuccess = Récupération réussie du jeton de l'API Graph pour les machines MDE.
 mdeGetMachinesFailed = Échec de la récupération des machines de Defender pour Endpoint
 mainError = Une erreur s'est produite lors de l'exécution du script.
 mainMidpointMessage = Traitement de Defender pour les serveurs terminé. Début du traitement de Defender pour Endpoint.

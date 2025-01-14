@@ -18,14 +18,9 @@ azureGetVirtualMachineScaleSetsFailed = Failed to get Virtual Machine Scale Sets
 azureGetArcMachinesFailed = Failed to get Arc Machines
 processMachinesStart = Processing (setting or reading) pricing configuration for VM 
 processMachinesError = Failed to get pricing configuration for VM
+mdeGetMachinesTokenSuccess = Retrieved Graph API for MDE machines token successfully.
 mdeGetMachinesTokenFailed = Failed to acquire token to MDE Endpoint - Check App Registration
 mdeGetMachinesFailed = Failed to retrieve machines from Defender for Endpoint
-mainError = An error occurred during the execution of the script
-mainMidpointMessage = Defender for Servers processing complete.  Starting Defender for Endpoint processing
-mainSkipMDE = Skipping MDE setup and query function calls per user request
-mainMDEWillBeSkipped = MDE credentials are missing.  Skipping MDE search per user request
-mainAbort = Exiting script by user request due to missing MDE credentials
-mainMissingTenantID = One or more credentials for MDE are missing from command line.  Please enter Tenant ID:
-mainMissingClientID = One or more credentials for MDE are missing from command line.  Please enter  Client (App) ID:
-mainMissingClientSecret = One or more credentials for MDE are missing from command line.  Please enter  Client Secret:
+mainError = An error occurred during the execution of the script.
+mainMidpointMessage = Defender for Servers processing complete.  Starting Defender for Endpoint processing.
 '@
