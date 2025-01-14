@@ -354,22 +354,34 @@ function Get-MDEAccessToken {
 # Get the machines from Defender for Endpoint
 function Get-MDEMachines ($MDEAccessToken){
 
-    $url = "https://api.securitycenter.microsoft.com/api/machines"
     $headers = @{
         'Content-Type' = 'application/json'
         Accept         = 'application/json'
         Authorization  = "Bearer $MDEAccessToken"
     }
 
-    try {
-        $response = Invoke-WebRequest -Method Get -Uri $url -Headers $headers
-    } catch {
-        Write-Host $UserMessages.mdeGetMachinesFailed -ForegroundColor Red
-        Write-Host "Error from response:" $_.ErrorDetails -ForegroundColor Red
-        exit 1
-    }
+    $url = "https://api.securitycenter.microsoft.com/api/machines"
 
-    return ($response.Content | ConvertFrom-Json).value
+    $allResults = @()
+
+    do {
+        try {
+            $response = Invoke-RestMethod -Method Get -Uri $url -Headers $headers
+
+        } catch {
+            Write-Host $UserMessages.mdeGetMachinesFailed -ForegroundColor Red
+            Write-Host "Error from response:" $_.ErrorDetails -ForegroundColor Red
+            exit 1
+        }     
+
+        # Append the current page of data to the allData array
+        $allResults += $response.value
+
+        # Check if there is a nextLink
+        $url = $response.'@odata.nextLink'
+    } while ($url)
+    
+    return $allResults
 }
 
 function Invoke_MDEMachinesProcessing {
