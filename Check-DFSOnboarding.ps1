@@ -72,6 +72,8 @@ $UserMessages = Data {
     azureTShootURL = https://learn.microsoft.com/en-us/azure/defender-for-cloud/enable-defender-for-endpoint
     mdeTShootMsg = Check MDE Direct Onboarding Configuration
     mdeTShootURL = https://learn.microsoft.com/en-us/azure/defender-for-cloud/onboard-machines-with-defender-for-endpoint
+    NameMatchOnboardMessage = Servers Onboarded Having Matched Names
+    NameTShootMessage = Servers have full DFS functionality but have dual onboarding - Check DFS Onboarding Config
     processNoRecordsMessage = No records found
     correctOnboardMessage = Servers Correctly Onboarded
     azureOnboardOnly = Servers Onboarded To Defender for Servers (Azure) Only
@@ -453,14 +455,13 @@ function Get-MDEMachines ($MDEAccessToken){
     return $allResults
 }
 
-function Invoke_MDEMachinesProcessing {
+function Set-MDEMachineAttribs {
     param (
         [array] $MDEmachines
     )
 
-    $MDEServers = @()
+    $MDEAll = @()
     $MDEmachines | ForEach-Object {
-        if ($_.osPlatform.contains("Server") -or $_.osPlatform.contains("Linux")) {
             $currentMachine = [pscustomobject]@{
                 Name             = $_.computerDnsName
                 MDEID            = $_.id
@@ -479,47 +480,91 @@ function Invoke_MDEMachinesProcessing {
                 $currentMachine.MachineID = $_.vmMetadata.vmId #Matching VMID to DFS
             }
 
+            $MDEAll += $currentMachine
+        
+    }
+    return $MDEAll
+}
+
+function Get-MDEServers {
+    param (
+        [array] $MDEmachines
+    )
+
+    $MDEServers = @()
+    $MDEmachines | ForEach-Object {
+        if ($_.osPlatform.contains("Server") -or $_.osPlatform.contains("Linux")) {
             $MDEServers += $currentMachine
         }
     }
     return $MDEServers
 }
 
-function Compare-Lists-ByMachID {
+function Compare-ByMachID {
     param (
         [array] $DefenderForCloudServers,
-        [array] $MDEServers
+        [array] $MDEDevices
     )
 
-    $Comparison = Compare-Object -ReferenceObject $DefenderForCloudServers -DifferenceObject $MDEServers -Property MachineID -IncludeEqual -PassThru 
+    $Comparison = Compare-Object -ReferenceObject $DefenderForCloudServers -DifferenceObject $MDEDevices -Property MachineID -IncludeEqual -PassThru 
 
-    $matches = $Comparison | Where-Object { $_.SideIndicator -eq "==" }
+    $IDmatches = $Comparison | Where-Object { $_.SideIndicator -eq "==" }
     $onlyInLeft = $Comparison | Where-Object { $_.SideIndicator -eq "<=" }
     $onlyInRight = $Comparison | Where-Object { $_.SideIndicator -eq "=>" }
 
-    return $matches, $onlyInLeft, $onlyInRight
+    return $IDmatches, $onlyInLeft, $onlyInRight
 }
 
-function Compare-Lists-ByName {
+function Compare-ByName {
     param (
         [array] $DefenderForCloudServers,
-        [array] $MDEServers
+        [array] $MDEDevices
     )
 
-    $Comparison = Compare-Object -ReferenceObject $DefenderForCloudServers -DifferenceObject $MDEServers -Property Name -IncludeEqual -PassThru 
+    $Comparison = Compare-Object -ReferenceObject $DefenderForCloudServers -DifferenceObject $MDEDevices -Property Name -IncludeEqual -PassThru 
 
-    $matches = $Comparison | Where-Object { $_.SideIndicator -eq "==" }
+    $NameMatches = $Comparison | Where-Object { $_.SideIndicator -eq "==" }
     $onlyInLeft = $Comparison | Where-Object { $_.SideIndicator -eq "<=" }
     $onlyInRight = $Comparison | Where-Object { $_.SideIndicator -eq "=>" }
 
-    return $matches, $onlyInLeft, $onlyInRight
+    return $NameMatches, $onlyInLeft, $onlyInRight
 }
 
-function CreateHTMLSection {
+function Get-JoinedList {
     param (
-        [string] $Title,
+        [array] $DFSMatches,
+        [array] $MDECandidates,
+        [string] $MatchAttrib = "MachineID"
+    )
+        
+    $locComboRecords = @()
+    $DFSMatches | ForEach-Object {
+        $Combinedrecord = $_
+            
+        $Combinedrecord.PSObject.Properties.Remove('SideIndicator')
+        $MDEMatch = $MDECandidates | Where-Object { $_.$($MatchAttrib) -eq $Combinedrecord.$($MatchAttrib) }
+
+        $MDEMatch.PSObject.Properties | ForEach-Object {
+            if ((!($_.Name.Equals("Name"))) -and (!($_.Name.Equals("MachineID"))) -and (!($_.Name.Equals("SideIndicator")))) {
+                $Combinedrecord | Add-Member -MemberType NoteProperty -Name $_.Name -Value $_.Value
+            }
+        }
+
+        # Always remove the SideIndicator property if it exists
+        if ($Combinedrecord.PSObject.Properties.Match('SideIndicator')) {
+            $Combinedrecord.PSObject.Properties.Remove('SideIndicator')
+        }
+
+        $locComboRecords += $Combinedrecord
+    }
+
+    return $locComboRecords
+}
+
+function New-HTMLSection {
+    param (
         [array] $Records,
-        [bool] $IncludeProperties = $false,
+        [string] $Title,
         [string] $TSmsg,
         [string] $TSURL
     )
@@ -531,29 +576,10 @@ function CreateHTMLSection {
         $row = 0
 
         $Records | ForEach-Object {
-            $currentRecord = $_
-            if ($IncludeProperties) {
-                $Combinedrecord = $DefenderForCloudServers | Where-Object { $_.MachineID -eq $currentRecord.MachineID }
-                $Combinedrecord.PSObject.Properties.Remove('SideIndicator')
-                $MDEMatch = $MDEServers | Where-Object { $_.MachineID -eq $currentRecord.MachineID }
-
-                $MDEMatch.PSObject.Properties | ForEach-Object {
-                    if ((!($_.Name.Equals("Name"))) -and (!($_.Name.Equals("MachineID"))) -and (!($_.Name.Equals("SideIndicator")))) {
-                        $Combinedrecord | Add-Member -MemberType NoteProperty -Name $_.Name -Value $_.Value
-                    }
-                }
-            } else {
-                $Combinedrecord = $currentRecord
-            }
-            
-            # Always remove the SideIndicator property if it exists
-            if ($Combinedrecord.PSObject.Properties.Match('SideIndicator')) {
-                $Combinedrecord.PSObject.Properties.Remove('SideIndicator')
-            }
 
             if ($row -eq 0) {
                 $htmlSection += "       <tr>"
-                $Combinedrecord.PSObject.Properties | ForEach-Object {
+                $_.PSObject.Properties | ForEach-Object {
                     $htmlSection += "<td>$($_.Name)</td>"
                 }
                 $htmlSection += "       </tr>"
@@ -561,18 +587,20 @@ function CreateHTMLSection {
             }
 
             $htmlSection += "       <tr>"
-            $Combinedrecord.PSObject.Properties | ForEach-Object {
+            $_.PSObject.Properties | ForEach-Object {
                 $htmlSection += "<td>$($_.Value)</td>"
             }
             $htmlSection += "       </tr>"
         }
         $htmlSection += "    </table>"
-        if (!($IncludeProperties)){
-            $htmlSection += "<table>"
-            $htmlSection += "<tr><td> </td></tr>"
+        $htmlSection += "<table>"
+        $htmlSection += "<tr><td> </td></tr>"
+        if ($TSURL){
             $htmlSection += "<tr><td><a href=" + [char]34 + $TSURL + [char]34 + ">" + $TSmsg + "</a></td></tr>"
-            $htmlSection += "</table>"
         }
+        else {$htmlSection += "<tr><td>" + $TSmsg + "</td></tr>"}
+        $htmlSection += "</table>"
+        
     } else {
         $htmlSection += "    <h2>" + $Title + "</h2>"
         $htmlSection += "    <table><tr><td>" + $UserMessages.processNoRecordsMessage + "</td></tr></table>"
@@ -623,9 +651,10 @@ function Get-DefaultHTML {
 
 function Export-HTMLReport {
     param (
-        [array] $matches,
-        [array] $onlyInLeft,
-        [array] $onlyInRight,
+        [array] $IDmatches,
+        [array] $NameMatches,
+        [array] $onlyInDFS,
+        [array] $onlyInMDE,
         [string] $outputFile
     )
 
@@ -634,9 +663,10 @@ function Export-HTMLReport {
         $html = Get-DefaultHTML
     }
 
-    $html += CreateHTMLSection -Title $UserMessages.correctOnboardMessage -Records $matches -IncludeProperties $true
-    $html += CreateHTMLSection -Title $UserMessages.azureOnboardOnly -Records $onlyInLeft -TSmsg $UserMessages.azureTShootMessage -TSURL $UserMessages.azureTShootURL
-    $html += CreateHTMLSection -Title $UserMessages.mdeOnboardOnly -Records $onlyInRight -TSmsg $UserMessages.mdeTShootMsg -TSURL $UserMessages.mdeTShootURL
+    $html += New-HTMLSection -Records $IDmatches -Title $UserMessages.correctOnboardMessage
+    $html += New-HTMLSection -Records $Namematches -Title $UserMessages.NameMatchOnboardMessage -TSmsg $UserMessages.NameTShootMessage
+    $html += New-HTMLSection -Records $onlyInDFS -Title $UserMessages.azureOnboardOnly  -TSmsg $UserMessages.azureTShootMessage -TSURL $UserMessages.azureTShootURL
+    $html += New-HTMLSection -Records $onlyInMDE -Title $UserMessages.mdeOnboardOnly  -TSmsg $UserMessages.mdeTShootMsg -TSURL $UserMessages.mdeTShootURL
 
     $html += "    <h2>Output file: " + $outputFile + "</h2>"
     $html += "</body>"
@@ -683,25 +713,42 @@ function Main {
     Write-Host $UserMessages.mainMidpointMessage -ForegroundColor Green # Show the midpoint message and display it in green as a marker of success
 
     if ($MDEAccessToken.length -gt 0){
-        $MDEmachines = Get-MDEMachines $MDEAccessToken # Get the machines from Defender for Endpoint
-        $MDEServers = Invoke_MDEMachinesProcessing -MDEmachines $MDEmachines # Process the machines from Defender for Endpoint
+        $MDEmachines = Get-MDEMachines $MDEAccessToken # Get the machines from Defender for Endpoint (MDE)
+        $MDEAll = Set-MDEMachineAttribs -MDEmachines $MDEmachines # Refine MDE list to have only required attributes 
     }
 
     $outputFile = "DFSCheck-" + (Get-Date).ToString("yyyyMMddHHmmss") + ".html" # Generate the output file name
 
-    if (($DefenderForCloudServers.length -gt 0) -and ($MDEServers.length -gt 0)){ # We need at least 1 server in both sides to compare
+    if (($DefenderForCloudServers.length -gt 0) -and ($MDEAll.length -gt 0)){ # We need at least 1 server in both sides to compare
 
-        $MachIDmatches, $MachIDonlyInMDC, $MachIDonlyInMDE = Compare-Lists-ByMachID -DefenderForCloudServers $DefenderForCloudServers -MDEServers $MDEServers # Compare the lists
-        #Namematches, $NameonlyInLeft, $NameonlyInRight = Compare-Lists-ByName -DefenderForCloudServers $DefenderForCloudServers -MDEServers $MDEServers # Compare the lists
+        # First Check - By ID
+        $MachIDmatches, $MachIDonlyInMDC, $MachIDonlyInMDE = Compare-ByMachID -DefenderForCloudServers $DefenderForCloudServers -MDEDevices $MDEAll # Compare the lists by VMID
+        $ComboIDMatches = Get-JoinedList -DFSMatches $MachIDmatches -MDECandidates $MDEAll -MatchAttrib "MachineID" # Create ByID combined list
+        $MDEAll = @() # No longer need entire MDE list
 
-        Export-HTMLReport -matches $MachIDmatches -onlyInLeft $MachIDonlyInMDC -onlyInRight $MachIDonlyInMDE -outputFile $outputFile # Generate the HTML report
+        # Second Check - By Name
+        $NameMatches, $NameonlyInMDC, $NameonlyInMDE = Compare-ByName -DefenderForCloudServers $MachIDonlyInMDC -MDEDevices $MachIDonlyInMDE # Compare the lists by name
+        # Create ByName combined list
+        $ComboNameMatches = Get-JoinedList -DFSMatches $NameMatches -MDECandidates $MachIDonlyInMDE -MatchAttrib "Name"
+        $MachIDonlyInMDE = @() # No longer need entire MDE list
+
+        # Narrow down remaining MDE list to only Servers
+        if ($NameonlyInMDE.length -gt 0){
+            $MDEServers = Get-MDEServers -MDEmachines $NameonlyInMDE
+            $NameonlyInMDE = @() # No longer need entire MDE endpoint list
+        }
+
+        Export-HTMLReport -IDmatches $ComboIDMatches -NameMatches $ComboNameMatches -onlyInDFS $NameonlyInMDC -onlyInMDE $MDEServers -outputFile $outputFile # Generate the HTML report
     }
     else { # We will generate the report having only the list where servers were found
         if ($DefenderForCloudServers.length -eq 0){
-            Export-HTMLReport -matches $null -onlyInLeft $null -onlyInRight $MDEServers -outputFile $outputFile # Generate the HTML report
+            if ($MDEAll.length -gt 0){
+                $MDEServers = Get-MDEServers -MDEmachines $MDEAll
+                Export-HTMLReport -IDmatches $null -NameMatches $null -onlyInDFS $null -onlyInMDE $MDEServers -outputFile $outputFile # Generate the HTML report
+            }
         }
         else {
-            Export-HTMLReport -matches $null -onlyInLeft $DefenderForCloudServers -onlyInRight $null -outputFile $outputFile # Generate the HTML report
+            Export-HTMLReport -IDmatches $null -NameMatches $null -onlyInDFS $DefenderForCloudServers -onlyInMDE $null -outputFile $outputFile # Generate the HTML report
         }
     }
 
