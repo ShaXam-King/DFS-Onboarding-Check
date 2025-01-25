@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-    CheckDFSOnboarding.ps1 - Reads Azure/Def for Servers inventory, reads servers from Def for Endpoint, compares the lists, and generates an HTML output file.
+    CheckDFSOnboarding.ps1 - Reads Azure/Def for Servers inventory, reads servers from Def for Endpoint, compares the lists, and generates an output file (default is HTML).
 
 .DESCRIPTION
     1) Reads Azure Defender for Servers inventory.
@@ -68,14 +68,23 @@ $UserMessages = Data {
     mainMidpointMessage = Defender for Servers processing complete.  Starting Defender for Endpoint processing.
     mainSkipMDE = Skipping MDE setup and query function calls per user request
     mainMDEWillBeSkipped = MDE credentials are missing. Skipping MDE search per user request
-    azureTShootMessage = Check Defender for Cloud MDE Onboarding Configuration
+    mainAzureMachinesCountMsg = Total Defender For Servers inventoried servers found
+    mainMDETotalDeviceCount = Total Defender for Endpoint onboarded devices
+    mainMatchByIDMsg = Devices matched by Machine ID
+    mainMatchByNameMsg = Devices matched by Name
+    mainMDEUnmatchedMsg = Servers onboarded to MDE not in Defender for Servers inventory
+    mainMDCUnmatchedMsg = Servers in Defender for Servers inventory not onboarded to MDE
+    mainMDEComplete = MDE device list access complete - Moving to comparison process
+    mainNoCompareMsg = A list has no entries - no comparison attempted 
+    azureTShootMessage = Check Defender for Cloud MDE onboarding configuration
     azureTShootURL = https://learn.microsoft.com/en-us/azure/defender-for-cloud/enable-defender-for-endpoint
     mdeTShootMsg = Check MDE Direct Onboarding Configuration
     mdeTShootURL = https://learn.microsoft.com/en-us/azure/defender-for-cloud/onboard-machines-with-defender-for-endpoint
     NameMatchOnboardMessage = Servers Onboarded Having Matched Names
-    NameTShootMessage = Servers have full Defender for Servers functionality but were not onboarded by the service - Check DFS Onboarding Config
+    NameTShootMessage = Servers have full DFS functionality but have dual onboarding - Check DFS Onboarding Config
     processNoRecordsMessage = No issues found
     correctOnboardMessage = Servers Correctly Onboarded
+    correctOnboardTShootMsg = Servers have full DFS functionality with correct onboarding - Well done!
     azureOnboardOnly = Servers Onboarded To Defender for Servers (Azure) Only
     mdeOnboardOnly = Servers Onboarded To Defender For Endpoint Only
 '@
@@ -566,7 +575,9 @@ function New-HTMLSection {
         [array] $Records,
         [string] $Title,
         [string] $TSmsg,
-        [string] $TSURL
+        [string] $TSURL,
+        [string] $ItemCount,
+        [string] $CountMsg
     )
 
     $htmlSection = ""
@@ -594,11 +605,14 @@ function New-HTMLSection {
         }
         $htmlSection += "    </table>"
         $htmlSection += "<table>"
-        $htmlSection += "<tr><td> </td></tr>"
+        #$htmlSection += "<tr><td> </td></tr>"
+        $htmlSection += "<tr>"
         if ($TSURL){
-            $htmlSection += "<tr><td><a href=" + [char]34 + $TSURL + [char]34 + ">" + $TSmsg + "</a></td></tr>"
+            $htmlSection += "<td><a href=" + [char]34 + $TSURL + [char]34 + ">" + $TSmsg + "</a></td>"
         }
-        else {$htmlSection += "<tr><td>" + $TSmsg + "</td></tr>"}
+        else {$htmlSection += "<td>" + $TSmsg + "</td>"}
+        $htmlSection += "<td>" + $ItemCount + " " + $CountMsg + "</td>"
+        $htmlSection += "</tr>"
         $htmlSection += "</table>"
         
     } else {
@@ -663,10 +677,10 @@ function Export-HTMLReport {
         $html = Get-DefaultHTML
     }
 
-    $html += New-HTMLSection -Records $IDmatches -Title $UserMessages.correctOnboardMessage
-    $html += New-HTMLSection -Records $Namematches -Title $UserMessages.NameMatchOnboardMessage -TSmsg $UserMessages.NameTShootMessage
-    $html += New-HTMLSection -Records $onlyInDFS -Title $UserMessages.azureOnboardOnly  -TSmsg $UserMessages.azureTShootMessage -TSURL $UserMessages.azureTShootURL
-    $html += New-HTMLSection -Records $onlyInMDE -Title $UserMessages.mdeOnboardOnly  -TSmsg $UserMessages.mdeTShootMsg -TSURL $UserMessages.mdeTShootURL
+    $html += New-HTMLSection -Records $IDmatches -Title $UserMessages.correctOnboardMessage -TSmsg $UserMessages.correctOnboardTShootMsg -ItemCount $IDmatches.Length -CountMsg $UserMessages.mainMatchByIDMsg
+    $html += New-HTMLSection -Records $Namematches -Title $UserMessages.NameMatchOnboardMessage -TSmsg $UserMessages.NameTShootMessage -ItemCount $NameMatches.length -CountMsg $UserMessages.mainMatchByNameMsg
+    $html += New-HTMLSection -Records $onlyInDFS -Title $UserMessages.azureOnboardOnly  -TSmsg $UserMessages.azureTShootMessage -TSURL $UserMessages.azureTShootURL -ItemCount $onlyInDFS.Length -CountMsg $UserMessages.mainMDCUnmatchedMsg
+    $html += New-HTMLSection -Records $onlyInMDE -Title $UserMessages.mdeOnboardOnly  -TSmsg $UserMessages.mdeTShootMsg -TSURL $UserMessages.mdeTShootURL -ItemCount $onlyInMDE -CountMsg $UserMessages.mainMDEUnmatchedMsg
 
     $html += "    <h2>Output file: " + $outputFile + "</h2>"
     $html += "</body>"
@@ -707,6 +721,7 @@ function Main {
                 $DefenderForCloudServers += Invoke_VirtualMachineConfiguration $vmssResponseMachines $SubscriptionId $AZaccessToken # Process the virtual machine scale sets
                 $DefenderForCloudServers += Invoke_VirtualMachineConfiguration $arcResponseMachines $SubscriptionId $AZaccessToken # Process the Arc machines
             }
+            Write-Host $DefenderForCloudServers.length $UserMessages.mainAzureMachinesCountMsg  -ForegroundColor Magenta # number of Azure machines in plan found
         }
     }
 
@@ -717,6 +732,9 @@ function Main {
         $MDEAll = Set-MDEMachineAttribs -MDEmachines $MDEmachines # Refine MDE list to have only required attributes 
     }
 
+    Write-Host $MDEAll.length $UserMessages.mainMDETotalCount -ForegroundColor Magenta # number of MDE devices found
+    Write-Host $UserMessages.mainMDEComplete -ForegroundColor Green 
+
     $outputFile = "DFSCheck-" + (Get-Date).ToString("yyyyMMddHHmmss") + ".html" # Generate the output file name
 
     if (($DefenderForCloudServers.length -gt 0) -and ($MDEAll.length -gt 0)){ # We need at least 1 server in both sides to compare
@@ -724,30 +742,38 @@ function Main {
         # First Check - By ID
         $MachIDmatches, $MachIDonlyInMDC, $MachIDonlyInMDE = Compare-ByMachID -DefenderForCloudServers $DefenderForCloudServers -MDEDevices $MDEAll # Compare the lists by VMID
         $ComboIDMatches = Get-JoinedList -DFSMatches $MachIDmatches -MDECandidates $MDEAll -MatchAttrib "MachineID" # Create ByID combined list
+        Write-Host $ComboIDMatches.length $UserMessages.mainMatchByIDMsg -ForegroundColor Magenta
         $MDEAll = @() # No longer need entire MDE list
+
 
         # Second Check - By Name
         $NameMatches, $NameonlyInMDC, $NameonlyInMDE = Compare-ByName -DefenderForCloudServers $MachIDonlyInMDC -MDEDevices $MachIDonlyInMDE # Compare the lists by name
         # Create ByName combined list
         $ComboNameMatches = Get-JoinedList -DFSMatches $NameMatches -MDECandidates $MachIDonlyInMDE -MatchAttrib "Name"
+        Write-Host $ComboNameMatches.length $UserMessages.mainMatchByNameMsg -ForegroundColor Magenta 
         $MachIDonlyInMDE = @() # No longer need entire MDE list
 
         # Narrow down remaining MDE list to only Servers
         if ($NameonlyInMDE.length -gt 0){
             $MDEServers = Get-MDEServers -MDEmachines $NameonlyInMDE
+            Write-Host $MDEServers.length $UserMessages.mainMDEUnmatchedMsg -ForegroundColor Magenta 
             $NameonlyInMDE = @() # No longer need entire MDE endpoint list
         }
 
+        Write-Host $NameonlyInMDC.length $UserMessages.mainMDCUnmatchedMsg -ForegroundColor Magenta
         Export-HTMLReport -IDmatches $ComboIDMatches -NameMatches $ComboNameMatches -onlyInDFS $NameonlyInMDC -onlyInMDE $MDEServers -outputFile $outputFile # Generate the HTML report
     }
     else { # We will generate the report having only the list where servers were found
+        Write-Host $UserMessages.mainNoCompareMsg -ForegroundColor Green
         if ($DefenderForCloudServers.length -eq 0){
             if ($MDEAll.length -gt 0){
                 $MDEServers = Get-MDEServers -MDEmachines $MDEAll
+                Write-Host $MDEServers.length $UserMessages.mainMDEUnmatchedMsg -ForegroundColor Magenta
                 Export-HTMLReport -IDmatches $null -NameMatches $null -onlyInDFS $null -onlyInMDE $MDEServers -outputFile $outputFile # Generate the HTML report
             }
         }
         else {
+            Write-Host $DefenderForCloudServers.length $UserMessages.mainMDCUnmatchedMsg -ForegroundColor Magenta
             Export-HTMLReport -IDmatches $null -NameMatches $null -onlyInDFS $DefenderForCloudServers -onlyInMDE $null -outputFile $outputFile # Generate the HTML report
         }
     }
