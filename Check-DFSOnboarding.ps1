@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-    CheckDFSOnboarding.ps1 - Reads Azure/Def for Servers inventory, reads servers from Def for Endpoint, compares the lists, and generates an HTML output file.
+    CheckDFSOnboarding.ps1 - Reads Azure/Def for Servers inventory, reads servers from Def for Endpoint, compares the lists, and generates an output file (default is HTML).
 
 .DESCRIPTION
     1) Reads Azure Defender for Servers inventory.
