@@ -176,94 +176,83 @@ function Get-UserInputList {
 }
 
 function Get-Subscriptions {
-    Try{
-        if (!($AzureContext)) { 
-            Write-Host $UserMessages.azureSubscriptionContextNotFound -ForegroundColor Yellow
+    try {
+        if (-not $AzureContext) { 
+            Write-Output $UserMessages.azureSubscriptionContextNotFound
             $AzureContext = Get-AzContext 
         }
 
         if ($AzureContext) {
-            $cursubscription = Get-AzSubscription -SubscriptionId $AzureContext.Subscription.Id # Get the Tenant ID of the subscription
+            $cursubscription = Get-AzSubscription -SubscriptionId $AzureContext.Subscription.Id
 
-            Clear-Host
-            Write-Host $UserMessages.azureSubscriptionChoiceMsg1 -ForegroundColor Green
-            Write-Host $UserMessages.azureSubscriptionChoiceMsg2 -ForegroundColor Green
-            Write-Host ""
-            
-            if($cursubscription.TenantId -eq $TenantId){
-                
-                Write-Host $UserMessages.azureSubscriptionCountextFound * $AzureContext.Subscription.Id * $AzureContext.Subscription.Name -ForegroundColor Green
-                Write-host ""
+            Write-Output ""
+            Write-Output ""
+            Write-Output "$($UserMessages.azureSubscriptionChoiceMsg1)"
+            Write-Output "$($UserMessages.azureSubscriptionChoiceMsg2)"
+            Write-Output ""
+
+            if ($cursubscription.TenantId -eq $TenantId) {
+                Write-Output "$($UserMessages.azureSubscriptionCountextFound) * $($AzureContext.Subscription.Id) * $($AzureContext.Subscription.Name)"
+                Write-Output ""
                 $response = Read-Host -Prompt $UserMessages.azureSubChoiceYN
 
                 if ($response.ToLower() -eq "y") {
-                    return $AzureContext.Subscription  # This returns if he choice is yes 
+                    return $AzureContext.Subscription
                 }
             }
         }
-        # Next section will only process if no return already - will process all available subscriptions
-        try {
-            Clear-Host
-            Write-Host $UserMessages.azureSubscriptionsStart -ForegroundColor Blue
-            $FoundSubscriptions = get-azsubscription
-            $num = 1
-            $AssocSubscriptions = @() # setting up to assure found subscriptions are applicable (Associated to Tenant)
 
-            $FoundSubscriptions | ForEach-Object {
-                $cursubscription = Get-AzSubscription -SubscriptionId $_.SubscriptionId # Get the Tenant ID of the subscription
-                if($cursubscription.TenantId -eq $TenantId){
-                 $AssocSubscriptions += $_
-                 Write-host $num") Name:" $_.Name "ID:" $_.SubscriptionId
-                 $num++
+        try {
+            Write-Output ""
+            Write-Output $UserMessages.azureSubscriptionsStart
+            $FoundSubscriptions = Get-AzSubscription #retrieves all subscriptions associated to the signed-in user
+            $AssocSubscriptions = @()
+
+            $FoundSubscriptions | ForEach-Object { # Narrowing down list to only subscrs connected to the same Tenant as MDE
+                $cursubscription = Get-AzSubscription -SubscriptionId $_.SubscriptionId
+                if ($cursubscription.TenantId -eq $TenantId) {
+                    $AssocSubscriptions += $_
+                    Write-Output "$num) Name: $_.Name ID: $_.SubscriptionId"
+                    $num++
                 }
             }
-            
-            $ChosenSubscriptions = @()  # setting up for the user to pick from the list
 
-            if ($AssocSubscriptions.length -gt 0){
-                
+            if ($AssocSubscriptions.Length -gt 0) {
                 $response = Read-Host -Prompt $UserMessages.azureSubChoiceAll
-                
-                if ($response.tolower() -eq "a"){
+
+                if ($response.ToLower() -eq "a") {
                     return $AssocSubscriptions
-                }
-                elseif ($response.tolower() -eq "c") {
+                } elseif ($response.ToLower() -eq "c") {
                     $response = Get-UserInputList -Prompt $UserMessages.azureSubChoiceNums -Default "A"
-                    if ($response.tolower() -eq "a"){
+                    if ($response.ToLower() -eq "a") {
                         return $AssocSubscriptions
-                    }
-                    else {
+                    } else {
                         $response.Split(",") | ForEach-Object {
                             $curNum = [int]$_
-                            if ($curNum -le $AssocSubscriptions.Length){
-                                $ChosenSubscriptions += $AssocSubscriptions[$curNum -1]
+                            if ($curNum -le $AssocSubscriptions.Length) {
+                                $ChosenSubscriptions += $AssocSubscriptions[$curNum - 1]
                             }
                         }
-                        if ($ChosenSubscriptions.length -gt 0){return $ChosenSubscriptions}
-                        else {return $AssocSubscriptions}
+                        if ($ChosenSubscriptions.Length -gt 0) {
+                            return $ChosenSubscriptions
+                        } else {
+                            return $AssocSubscriptions
+                        }
                     }
-                }
-                else {
-                    $UserMessages.azureSubscriptionNotFound
+                } else {
+                    Write-Output $UserMessages.azureSubscriptionNotFound
                     return $null
                 }
-            }
-            else {
-                $UserMessages.azureSubscriptionNotFound
+            } else {
+                Write-Output $UserMessages.azureSubscriptionNotFound
                 return $null
             }
-        } 
-        catch {
-            $errorMessage = $UserMessages.azureSubscriptionException
-            $errorDetails = $_.Exception.Message
-            Write-Host $errorMessage +":" $errorDetails -ForegroundColor Red
+        } catch {
+            Write-Output "$($UserMessages.azureSubscriptionException): $($_.Exception.Message)"
             return $null
         }
-    }
-    Catch {
-        $errorMessage = $UserMessages.azureSubscriptionException
-        $errorDetails = $_.Exception.Message
-        Write-Host $errorMessage +":" $errorDetails -ForegroundColor Red
+    } catch {
+        Write-Output "$($UserMessages.azureSubscriptionException): $($_.Exception.Message)"
         return $null
     }
 }
