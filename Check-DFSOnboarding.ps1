@@ -51,14 +51,18 @@ $UserMessages = Data {
     azureSubscriptionException = An exception occurred while getting Azure Subscriptions
     azureSubscriptionContextNotFound = Azure Context not found - attempting refresh
     azureSubscriptionCountextFound = Azure Context found
-    azureSubscriptionNotFound = Unable to find an Azure Subscription with the signed-in account
-    azureResourceGroupsStart = Retrieveing Resource Groups for Subscription:
+    azureSubscriptionNotFound = Unable to find an associated Azure Subscription with the signed-in account
+    azureResourceGroupsStart = Retrieving Resource Groups for Subscription:
     azureResourceGroupNotFound = Unable to retrieve resources from Resource Group
     azureGetVirtualMachinesFailed = Failed to get Virtual Machines
     azureGetVirtualMachineScaleSetsFailed = Failed to get Virtual Machine Scale Sets
     azureGetArcMachinesFailed = Failed to get Arc Machines
+    azureSubscriptionChoiceMsg1 = Choosing Y will process only current subscription in logged-in context
+    azureSubscriptionChoiceMsg2 = Choosing N will prompt for a choice of All or a list of subscriptions to process
     azureSubChoiceYN = Use only this subscription to compare onboarded servers? (Y/N)
-    azureSubChoiceNums = Choose Subscriptions by number (comma separated) (e.g. 1,3,4)
+    azureSubChoiceAll = Process All Subscriptions (A) or Choose individual subscriptions (C)
+    azureSubChoiceNums = Provide a comma-separated list of subscription numbers (e.g. 1,3,4)
+    azureSubInvalidInput = Invalid input. Please try again.
     processMachinesStart = Processing (setting or reading) pricing configuration for VM 
     processMachinesError = Failed to get pricing configuration for VM
     mdeGetMachinesTokenSuccess = Retrieved Graph API for MDE machines token successfully.
@@ -91,26 +95,6 @@ $UserMessages = Data {
 }
 
 }
-
-
-function Get-RequiredParams {
-
-    <#
-    $TenantId,
-    [string] $ClientId,
-    [string] $ClientSecret
-    #>
-    if ($TenantId.length -gt 0){
-
-    }
-    if ($TenantId.length -gt 0){
-
-    }
-    if ($TenantId.length -gt 0){
-
-    }
-
-} # End of Get-RequiredParams function
 
 function Import-RequiredModules {
     $modules = @("Az.Accounts", "Az.Resources")
@@ -170,6 +154,27 @@ function Get-AzureAccessToken {
     return $accessToken
 }
 
+function Get-UserInputList {
+    param (
+        [string]$Prompt = "Choose by comma-separated list of subscription numbers",
+        [string]$Default = "1"
+    )
+
+    $inputValid = $false
+
+    $response = Read-Host $Prompt
+            
+    $numbers = $response -split ","
+    if ($numbers -match "^\d+(,\d+)*$") {
+        $inputValid = $true
+    } else {
+        Write-Host $UserMessages.azureSubInvalidInput
+        $response = "A"
+    }
+
+    return $response
+}
+
 function Get-Subscriptions {
     Try{
         if (!($AzureContext)) { 
@@ -178,46 +183,81 @@ function Get-Subscriptions {
         }
 
         if ($AzureContext) {
+            $cursubscription = Get-AzSubscription -SubscriptionId $AzureContext.Subscription.Id # Get the Tenant ID of the subscription
+
             Clear-Host
-            Write-Host $UserMessages.azureSubscriptionCountextFound - $AzureContext.Subscription.Id -ForegroundColor Green
-            $response = Read-Host -Prompt $UserMessages.azureSubChoiceYN
-
-            if ($response.ToLower() -eq "y") {
-                return $AzureContext.Subscription
-            }
-            else {
-                try {
-                    Clear-Host
-                    Write-Host $UserMessages.azureSubscriptionsStart -ForegroundColor Blue
-                    $FoundSubscriptions = get-azsubscription
-                    $num = 1
-                    $FoundSubscriptions | ForEach-Object {
-                        Write-host $num") Name:" $_.Name "ID:" $_.SubscriptionId
-                        $num++
-                    }
-                    $ChosenSubscriptions = @()
-                    $response = Read-Host -Prompt $UserMessages.azureSubChoiceNums
-                    
-                    $response.Split(",") | ForEach-Object {
-                        $curNum = [int]$_
-                        if ($curNum - 1 -le $FoundSubscriptions.Length){$ChosenSubscriptions += $FoundSubscriptions[$curNum -1]}
-                    }
-
-                    return $ChosenSubscriptions
+            Write-Host $UserMessages.azureSubscriptionChoiceMsg1 -ForegroundColor Green
+            Write-Host $UserMessages.azureSubscriptionChoiceMsg2 -ForegroundColor Green
+            Write-Host ""
             
-                } 
-                catch {
-                    $errorMessage = $UserMessages.azureSubscriptionException
-                    $errorDetails = $_.Exception.Message
-                    Write-Host $errorMessage +":" $errorDetails -ForegroundColor Red
-                    return $null
+            if($cursubscription.TenantId -eq $TenantId){
+                
+                Write-Host $UserMessages.azureSubscriptionCountextFound * $AzureContext.Subscription.Id * $AzureContext.Subscription.Name -ForegroundColor Green
+                Write-host ""
+                $response = Read-Host -Prompt $UserMessages.azureSubChoiceYN
+
+                if ($response.ToLower() -eq "y") {
+                    return $AzureContext.Subscription  # This returns if he choice is yes 
                 }
             }
         }
-        else {
-            Write-Host $UserMessages.azureSubscriptionNotFound -ForegroundColor Red
-            Write-Host $_.ErrorDetails -ForegroundColor Red
-            throw
+        # Next section will only process if no return already - will process all available subscriptions
+        try {
+            Clear-Host
+            Write-Host $UserMessages.azureSubscriptionsStart -ForegroundColor Blue
+            $FoundSubscriptions = get-azsubscription
+            $num = 1
+            $AssocSubscriptions = @() # setting up to assure found subscriptions are applicable (Associated to Tenant)
+
+            $FoundSubscriptions | ForEach-Object {
+                $cursubscription = Get-AzSubscription -SubscriptionId $_.SubscriptionId # Get the Tenant ID of the subscription
+                if($cursubscription.TenantId -eq $TenantId){
+                 $AssocSubscriptions += $_
+                 Write-host $num") Name:" $_.Name "ID:" $_.SubscriptionId
+                 $num++
+                }
+            }
+            
+            $ChosenSubscriptions = @()  # setting up for the user to pick from the list
+
+            if ($AssocSubscriptions.length -gt 0){
+                
+                $response = Read-Host -Prompt $UserMessages.azureSubChoiceAll
+                
+                if ($response.tolower() -eq "a"){
+                    return $AssocSubscriptions
+                }
+                elseif ($response.tolower() -eq "c") {
+                    $response = Get-UserInputList -Prompt $UserMessages.azureSubChoiceNums -Default "A"
+                    if ($response.tolower() -eq "a"){
+                        return $AssocSubscriptions
+                    }
+                    else {
+                        $response.Split(",") | ForEach-Object {
+                            $curNum = [int]$_
+                            if ($curNum -le $AssocSubscriptions.Length){
+                                $ChosenSubscriptions += $AssocSubscriptions[$curNum -1]
+                            }
+                        }
+                        if ($ChosenSubscriptions.length -gt 0){return $ChosenSubscriptions}
+                        else {return $AssocSubscriptions}
+                    }
+                }
+                else {
+                    $UserMessages.azureSubscriptionNotFound
+                    return $null
+                }
+            }
+            else {
+                $UserMessages.azureSubscriptionNotFound
+                return $null
+            }
+        } 
+        catch {
+            $errorMessage = $UserMessages.azureSubscriptionException
+            $errorDetails = $_.Exception.Message
+            Write-Host $errorMessage +":" $errorDetails -ForegroundColor Red
+            return $null
         }
     }
     Catch {
@@ -694,7 +734,7 @@ function Export-HTMLReport {
 function Main {
 
     try {
-    #Get-RequiredParams
+    
     Import-RequiredModules # Import required modules
     Connect-AzureAccount # Connect to Azure account
     $AZaccessToken = Get-AzureAccessToken # Get Azure access token
