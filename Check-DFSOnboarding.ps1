@@ -62,7 +62,7 @@ $UserMessages = Data {
     azureSubChoiceYN = Use only this subscription to compare onboarded servers? (Y/N)
     azureSubChoiceAll = Process All Subscriptions (A) or Choose individual subscriptions (C)
     azureSubChoiceNums = Provide a comma-separated list of subscription numbers (e.g. 1,3,4)
-    azureSubInvalidInput = Invalid input. Please try again.
+    azureSubInvalidInput = Invalid input. Processing all associated subscriptions.
     processMachinesStart = Processing (setting or reading) pricing configuration for VM 
     processMachinesError = Failed to get pricing configuration for VM
     mdeGetMachinesTokenSuccess = Retrieved Graph API for MDE machines token successfully.
@@ -178,22 +178,22 @@ function Get-UserInputList {
 function Get-Subscriptions {
     try {
         if (-not $AzureContext) { 
-            Write-Output $UserMessages.azureSubscriptionContextNotFound
+            Write-Host $UserMessages.azureSubscriptionContextNotFound
             $AzureContext = Get-AzContext 
         }
 
         if ($AzureContext) {
             $cursubscription = Get-AzSubscription -SubscriptionId $AzureContext.Subscription.Id
 
-            Write-Output ""
-            Write-Output ""
-            Write-Output "$($UserMessages.azureSubscriptionChoiceMsg1)"
-            Write-Output "$($UserMessages.azureSubscriptionChoiceMsg2)"
-            Write-Output ""
+            Write-Host ""
+            Write-Host ""
+            Write-Host "$($UserMessages.azureSubscriptionChoiceMsg1)"
+            Write-Host "$($UserMessages.azureSubscriptionChoiceMsg2)"
+            Write-Host ""
 
             if ($cursubscription.TenantId -eq $TenantId) {
-                Write-Output "$($UserMessages.azureSubscriptionCountextFound) * $($AzureContext.Subscription.Id) * $($AzureContext.Subscription.Name)"
-                Write-Output ""
+                Write-Host "$($UserMessages.azureSubscriptionCountextFound) * $($AzureContext.Subscription.Id) * $($AzureContext.Subscription.Name)"
+                Write-Host ""
                 $response = Read-Host -Prompt $UserMessages.azureSubChoiceYN
 
                 if ($response.ToLower() -eq "y") {
@@ -203,16 +203,17 @@ function Get-Subscriptions {
         }
 
         try {
-            Write-Output ""
-            Write-Output $UserMessages.azureSubscriptionsStart
+            Write-Host ""
+            Write-Host $UserMessages.azureSubscriptionsStart
             $FoundSubscriptions = Get-AzSubscription #retrieves all subscriptions associated to the signed-in user
             $AssocSubscriptions = @()
+            [int] $num = 1
 
             $FoundSubscriptions | ForEach-Object { # Narrowing down list to only subscrs connected to the same Tenant as MDE
-                $cursubscription = Get-AzSubscription -SubscriptionId $_.SubscriptionId
-                if ($cursubscription.TenantId -eq $TenantId) {
+                #$cursubscription = Get-AzSubscription -SubscriptionId $_.SubscriptionId
+                if ($_.TenantId -eq $TenantId) {
                     $AssocSubscriptions += $_
-                    Write-Output "$num) Name: $_.Name ID: $_.SubscriptionId"
+                    Write-host $num") Name:" $_.Name "ID:" $_.SubscriptionId -ForegroundColor Blue
                     $num++
                 }
             }
@@ -236,23 +237,24 @@ function Get-Subscriptions {
                         if ($ChosenSubscriptions.Length -gt 0) {
                             return $ChosenSubscriptions
                         } else {
+                            Write-Host $UserMessages.azureSubInvalidInput -ForegroundColor Green
                             return $AssocSubscriptions
                         }
                     }
                 } else {
-                    Write-Output $UserMessages.azureSubscriptionNotFound
+                    Write-Host $UserMessages.azureSubscriptionNotFound
                     return $null
                 }
             } else {
-                Write-Output $UserMessages.azureSubscriptionNotFound
+                Write-Host $UserMessages.azureSubscriptionNotFound
                 return $null
             }
         } catch {
-            Write-Output "$($UserMessages.azureSubscriptionException): $($_.Exception.Message)"
+            Write-Host "$($UserMessages.azureSubscriptionException): $($_.Exception.Message)"
             return $null
         }
     } catch {
-        Write-Output "$($UserMessages.azureSubscriptionException): $($_.Exception.Message)"
+        Write-Host "$($UserMessages.azureSubscriptionException): $($_.Exception.Message)"
         return $null
     }
 }
@@ -404,7 +406,7 @@ function Invoke_VirtualMachineConfiguration ($machines, $SubscriptionId, $access
     $DefenderForCloudServers = @()
     foreach ($machine in $machines) {
         $pricingUrl = "https://management.azure.com$($machine.id)/providers/Microsoft.Security/pricings/virtualMachines?api-version=2024-01-01"
-        Write-Host $UserMessages.processMachinesStart + $($machine.name) -ForegroundColor Blue
+        Write-Host $UserMessages.processMachinesStart $($machine.name) -ForegroundColor Blue
         try {
             # Get the pricing configuration for the Virtual Machine from Azure
             $pricingResponse = Invoke-RestMethod -Method Get -Uri $pricingUrl -Headers @{ Authorization = "Bearer $accessToken" } -ContentType "application/json" -TimeoutSec 120 -ErrorAction SilentlyContinue

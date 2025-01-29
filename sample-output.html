@@ -3,131 +3,42 @@
 <head>
     <title>Defender for Servers Onboarding Check Output</title>
     <style>
-        table {
-            width:fit-content;
-            /*border-collapse: collapse;*/
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
         }
-        table, th, td {
-            border: 1px solid black;
+        h2 {
+            color: #333;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 20px;
         }
         th, td {
+            border: 1px solid #ddd;
             padding: 8px;
             text-align: left;
         }
         th {
             background-color: #f2f2f2;
+            color: #333;
+        }
+        tr:nth-child(even) {
+            background-color: #f9f9f8;
+        }
+        tr:hover {
+            background-color: #f1f1f1;
         }
     </style>
 </head>
 <body>
-    <h2>Servers Correctly Onboarded</h2>
-    <table>
-       <tr>
-<td>Name</td>
-<td>DFSGUID</td>
-<td>MachineID</td>
-<td>OSFamily</td>
-<td>Sub</td>
-<td>RG</td>
-<td>DSLocation</td>
-<td>PriceTier</td>
-<td>SubPlan</td>
-<td>EnrEnabled</td>
-<td>MDEID</td>
-<td>OSPlatform</td>
-<td>OSVersion</td>
-<td>onboardingStatus</td>
-<td>lastSeen</td>
-<td>Location</td>
-<td>MDESub</td>
-       </tr>
-       <tr>
-<td>ServerName1</td>
-<td>xx999999-9999-999x-999x-99x99x99x999</td>
-<td>9x99x99x-x9xx-9x99-999x-999x99xxxx9x</td>
-<td>2022-datacenter-azure-edition</td>
-<td>99x9999x-99x9-9999-x999-9x9x9x99999x</td>
-<td>MDEOnboard</td>
-<td>eastus</td>
-<td>Standard</td>
-<td>P2</td>
-<td>Yes</td>
-<td>999xx999xx9x9xxxx9x9x9xxx99xxxxx99xxx99x</td>
-<td>WindowsServer2022</td>
-<td>21H2</td>
-<td>Onboarded</td>
-<td>12/17/2024 19:00:26</td>
-<td>Azure</td>
-<td>99x9999x-99x9-9999-x999-9x9x9x99999x</td>
-       </tr>
-       <tr>
-<td>ServerName2</td>
-<td>99999999-9x99-99x9-xx99-99xx9xxxx9xx</td>
-<td>9xx9999x-9999-999x-9x99-99x99999x999</td>
-<td>2022-datacenter-azure-edition</td>
-<td>99x9999x-99x9-9999-x999-9x9x9x99999x</td>
-<td>241008-MDIOT</td>
-<td>eastus</td>
-<td>Standard</td>
-<td>P2</td>
-<td>Yes</td>
-<td>x99xx99x9999999x99999x99x9x9999xxx99xx99</td>
-<td>WindowsServer2022</td>
-<td>21H2</td>
-<td>CanBeOnboarded</td>
-<td>12/17/2024 17:37:49</td>
-<td>Azure</td>
-<td></td>
-       </tr>
-       <tr>
-<td>ServerName3</td>
-<td>9xx9xx9x-x999-9x99-9999-99xx99999999</td>
-<td>99999x9x-99xx-9999-99x9-99x999x99xx9</td>
-<td>2022-datacenter-azure-edition</td>
-<td>99x9999x-99x9-9999-x999-9x9x9x99999x</td>
-<td>MDEOnboard</td>
-<td>southcentralus</td>
-<td>Standard</td>
-<td>P2</td>
-<td>Yes</td>
-<td>xx9x9x999xxx99999x99999x999xx999999xx9xx</td>
-<td>WindowsServer2022</td>
-<td>21H2</td>
-<td>Onboarded</td>
-<td>12/20/2024 14:52:27</td>
-<td>Azure</td>
-<td>99x9999x-99x9-9999-x999-9x9x9x99999x</td>
-       </tr>
-    </table>
-    <h2>Servers Onboarded To Defender for Servers (Azure) Only</h2>
-    <table>
-       <tr>
-<td>Name</td>
-<td>DFSGUID</td>
-<td>MachineID</td>
-<td>OSFamily</td>
-<td>Sub</td>
-<td>RG</td>
-<td>DSLocation</td>
-<td>PriceTier</td>
-<td>SubPlan</td>
-<td>EnrEnabled</td>
-       </tr>
-       <tr>
-<td>ServerName4</td>
-<td>99999x99-9999-9xx9-x9x9-xxx9x9xx99xx</td>
-<td>999x99x9-9x9x-9xxx-9999-99x9999xx999</td>
-<td>win11-22h2-pro</td>
-<td>99x9999x-99x9-9999-x999-9x9x9x99999x</td>
-<td>MDEOnboard</td>
-<td>eastus</td>
-<td>Standard</td>
-<td>P2</td>
-<td>Yes</td>
-       </tr>
-    </table>
-    <h2></h2>
-    <table><tr><td>No Servers Onboarded To Defender For Endpoint Only</td></tr></table>
-    <h2>Output file: DFSCheck-241220172330.html</h2>
+    <h2>Servers Correctly Onboarded</h2>    <table>       <tr><td>Name</td><td>DFSGUID</td><td>MachineID</td><td>OSFamily</td><td>Sub</td><td>RG</td><td>DSLocation</td><td>PriceTier</td><td>SubPlan</td><td>EnrEnabled</td><td>MDEID</td><td>OSPlatform</td><td>OSVersion</td><td>onboardingStatus</td><td>lastSeen</td><td>Location</td><td>MDESub</td>       </tr>       <tr><td>241217-MDEMDC-RH1L1</td><td>xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx</td><td>xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx</td><td>Windows</td><td>xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx</td><td>MDEOnboard</td><td>eastus</td><td>Standard</td><td>P2</td><td>Yes</td><td>xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx</td><td>WindowsServer2022</td><td>21H2</td><td>Onboarded</td><td>12/26/2024 21:20:24</td><td>Azure</td><td>xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx</td>       </tr>       <tr><td>241226MDERH1</td><td>xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx</td><td>xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx</td><td>Linux</td><td>xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx</td><td>MDEOnboard</td><td>eastus</td><td>Standard</td><td>P2</td><td>Yes</td><td>xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx</td><td>Ubuntu</td><td>Other</td><td>Onboarded</td><td>12/26/2024 20:24:32</td><td>Azure</td><td>xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx</td>       </tr>       <tr><td>W11Test2410009</td><td>xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx</td><td>xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx</td><td>Windows - Desktop</td><td>xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx</td><td>MDEOnboard</td><td>eastus</td><td>Standard</td><td>P2</td><td>Yes</td><td>xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx</td><td>Windows11</td><td>22H2</td><td>CanBeOnboarded</td><td>12/17/2024 17:41:02</td><td>Azure</td><td></td>       </tr>       <tr><td>241217-MDEMDC</td><td>xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx</td><td>xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx</td><td>Windows</td><td>xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx</td><td>MDEOnboard</td><td>southcentralus</td><td>Standard</td><td>P2</td><td>Yes</td><td>xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx</td><td>WindowsServer2022</td><td>21H2</td><td>Onboarded</td><td>01/27/2025 23:21:18</td><td>Azure</td><td>xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx</td>       </tr>       <tr><td>Sensorhost02</td><td>xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx</td><td>xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx</td><td>Windows</td><td>xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx</td><td>241008-MDIOT</td><td>eastus</td><td>Standard</td><td>P2</td><td>Yes</td><td>xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx</td><td>WindowsServer2022</td><td>21H2</td><td>CanBeOnboarded</td><td>12/17/2024 17:37:49</td><td>Azure</td><td></td>       </tr>    </table><table><tr><td>Servers have full DFS functionality with correct onboarding - Well done!</td><td>5 Devices have matched by Machine ID</td></tr></table>
+    <h2>Servers Onboarded Having Matched Names</h2>    <table>       <tr><td>Name</td><td>DFSGUID</td><td>MachineID</td><td>OSFamily</td><td>Sub</td><td>RG</td><td>DSLocation</td><td>PriceTier</td><td>SubPlan</td><td>EnrEnabled</td><td>MDEID</td><td>OSPlatform</td><td>OSVersion</td><td>onboardingStatus</td><td>lastSeen</td><td>Location</td><td>MDESub</td>       </tr>       <tr><td>WIN-ESM46SM8F7N</td><td>xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx</td><td>xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx</td><td>Windows</td><td>xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx</td><td>ArcDemo241231</td><td>eastus</td><td>Standard</td><td>P2</td><td>Yes</td><td>xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx</td><td>WindowsServerSAC</td><td>Other</td><td>Onboarded</td><td>01/03/2025 14:42:18</td><td></td><td></td>       </tr>    </table><table><tr><td>Servers have full Defender for Servers functionality but were not onboarded by the service - Check DFS Onboarding Config</td><td>1 Devices matched by Name</td></tr></table>
+    <h2>Servers Onboarded To Defender for Servers (Azure) Only</h2>    <table><tr><td>No issues found</td></tr></table>
+    <h2>Servers Onboarded To Defender For Endpoint Only</h2>    <table><tr><td>No issues found</td></tr></table>
+    <h2>Output file: DFSCheck-20250129105856.html</h2>
 </body>
 </html>
+
+
