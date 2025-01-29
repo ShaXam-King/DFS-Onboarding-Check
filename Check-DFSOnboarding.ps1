@@ -51,14 +51,18 @@ $UserMessages = Data {
     azureSubscriptionException = An exception occurred while getting Azure Subscriptions
     azureSubscriptionContextNotFound = Azure Context not found - attempting refresh
     azureSubscriptionCountextFound = Azure Context found
-    azureSubscriptionNotFound = Unable to find an Azure Subscription with the signed-in account
-    azureResourceGroupsStart = Retrieveing Resource Groups for Subscription:
+    azureSubscriptionNotFound = Unable to find an associated Azure Subscription with the signed-in account
+    azureResourceGroupsStart = Retrieving Resource Groups for Subscription:
     azureResourceGroupNotFound = Unable to retrieve resources from Resource Group
     azureGetVirtualMachinesFailed = Failed to get Virtual Machines
     azureGetVirtualMachineScaleSetsFailed = Failed to get Virtual Machine Scale Sets
     azureGetArcMachinesFailed = Failed to get Arc Machines
+    azureSubscriptionChoiceMsg1 = Choosing Y will process only current subscription in logged-in context
+    azureSubscriptionChoiceMsg2 = Choosing N will prompt for a choice of All or a list of subscriptions to process
     azureSubChoiceYN = Use only this subscription to compare onboarded servers? (Y/N)
-    azureSubChoiceNums = Choose Subscriptions by number (comma separated) (e.g. 1,3,4)
+    azureSubChoiceAll = Process All Subscriptions (A) or Choose individual subscriptions (C)
+    azureSubChoiceNums = Provide a comma-separated list of subscription numbers (e.g. 1,3,4)
+    azureSubInvalidInput = Invalid input. Processing all associated subscriptions.
     processMachinesStart = Processing (setting or reading) pricing configuration for VM 
     processMachinesError = Failed to get pricing configuration for VM
     mdeGetMachinesTokenSuccess = Retrieved Graph API for MDE machines token successfully.
@@ -91,26 +95,6 @@ $UserMessages = Data {
 }
 
 }
-
-
-function Get-RequiredParams {
-
-    <#
-    $TenantId,
-    [string] $ClientId,
-    [string] $ClientSecret
-    #>
-    if ($TenantId.length -gt 0){
-
-    }
-    if ($TenantId.length -gt 0){
-
-    }
-    if ($TenantId.length -gt 0){
-
-    }
-
-} # End of Get-RequiredParams function
 
 function Import-RequiredModules {
     $modules = @("Az.Accounts", "Az.Resources")
@@ -170,60 +154,107 @@ function Get-AzureAccessToken {
     return $accessToken
 }
 
+function Get-UserInputList {
+    param (
+        [string]$Prompt = "Choose by comma-separated list of subscription numbers",
+        [string]$Default = "1"
+    )
+
+    $inputValid = $false
+
+    $response = Read-Host $Prompt
+            
+    $numbers = $response -split ","
+    if ($numbers -match "^\d+(,\d+)*$") {
+        $inputValid = $true
+    } else {
+        Write-Host $UserMessages.azureSubInvalidInput
+        $response = "A"
+    }
+
+    return $response
+}
+
 function Get-Subscriptions {
-    Try{
-        if (!($AzureContext)) { 
-            Write-Host $UserMessages.azureSubscriptionContextNotFound -ForegroundColor Yellow
+    try {
+        if (-not $AzureContext) { 
+            Write-Host $UserMessages.azureSubscriptionContextNotFound
             $AzureContext = Get-AzContext 
         }
 
         if ($AzureContext) {
-            Clear-Host
-            Write-Host $UserMessages.azureSubscriptionCountextFound - $AzureContext.Subscription.Id -ForegroundColor Green
-            $response = Read-Host -Prompt $UserMessages.azureSubChoiceYN
+            $cursubscription = Get-AzSubscription -SubscriptionId $AzureContext.Subscription.Id
 
-            if ($response.ToLower() -eq "y") {
-                return $AzureContext.Subscription
-            }
-            else {
-                try {
-                    Clear-Host
-                    Write-Host $UserMessages.azureSubscriptionsStart -ForegroundColor Blue
-                    $FoundSubscriptions = get-azsubscription
-                    $num = 1
-                    $FoundSubscriptions | ForEach-Object {
-                        Write-host $num") Name:" $_.Name "ID:" $_.SubscriptionId
-                        $num++
-                    }
-                    $ChosenSubscriptions = @()
-                    $response = Read-Host -Prompt $UserMessages.azureSubChoiceNums
-                    
-                    $response.Split(",") | ForEach-Object {
-                        $curNum = [int]$_
-                        if ($curNum - 1 -le $FoundSubscriptions.Length){$ChosenSubscriptions += $FoundSubscriptions[$curNum -1]}
-                    }
+            Write-Host ""
+            Write-Host ""
+            Write-Host "$($UserMessages.azureSubscriptionChoiceMsg1)"
+            Write-Host "$($UserMessages.azureSubscriptionChoiceMsg2)"
+            Write-Host ""
 
-                    return $ChosenSubscriptions
-            
-                } 
-                catch {
-                    $errorMessage = $UserMessages.azureSubscriptionException
-                    $errorDetails = $_.Exception.Message
-                    Write-Host $errorMessage +":" $errorDetails -ForegroundColor Red
-                    return $null
+            if ($cursubscription.TenantId -eq $TenantId) {
+                Write-Host "$($UserMessages.azureSubscriptionCountextFound) * $($AzureContext.Subscription.Id) * $($AzureContext.Subscription.Name)"
+                Write-Host ""
+                $response = Read-Host -Prompt $UserMessages.azureSubChoiceYN
+
+                if ($response.ToLower() -eq "y") {
+                    return $AzureContext.Subscription
                 }
             }
         }
-        else {
-            Write-Host $UserMessages.azureSubscriptionNotFound -ForegroundColor Red
-            Write-Host $_.ErrorDetails -ForegroundColor Red
-            throw
+
+        try {
+            Write-Host ""
+            Write-Host $UserMessages.azureSubscriptionsStart
+            $FoundSubscriptions = Get-AzSubscription #retrieves all subscriptions associated to the signed-in user
+            $AssocSubscriptions = @()
+            [int] $num = 1
+
+            $FoundSubscriptions | ForEach-Object { # Narrowing down list to only subscrs connected to the same Tenant as MDE
+                #$cursubscription = Get-AzSubscription -SubscriptionId $_.SubscriptionId
+                if ($_.TenantId -eq $TenantId) {
+                    $AssocSubscriptions += $_
+                    Write-host $num") Name:" $_.Name "ID:" $_.SubscriptionId -ForegroundColor Blue
+                    $num++
+                }
+            }
+
+            if ($AssocSubscriptions.Length -gt 0) {
+                $response = Read-Host -Prompt $UserMessages.azureSubChoiceAll
+
+                if ($response.ToLower() -eq "a") {
+                    return $AssocSubscriptions
+                } elseif ($response.ToLower() -eq "c") {
+                    $response = Get-UserInputList -Prompt $UserMessages.azureSubChoiceNums -Default "A"
+                    if ($response.ToLower() -eq "a") {
+                        return $AssocSubscriptions
+                    } else {
+                        $response.Split(",") | ForEach-Object {
+                            $curNum = [int]$_
+                            if ($curNum -le $AssocSubscriptions.Length) {
+                                $ChosenSubscriptions += $AssocSubscriptions[$curNum - 1]
+                            }
+                        }
+                        if ($ChosenSubscriptions.Length -gt 0) {
+                            return $ChosenSubscriptions
+                        } else {
+                            Write-Host $UserMessages.azureSubInvalidInput -ForegroundColor Green
+                            return $AssocSubscriptions
+                        }
+                    }
+                } else {
+                    Write-Host $UserMessages.azureSubscriptionNotFound
+                    return $null
+                }
+            } else {
+                Write-Host $UserMessages.azureSubscriptionNotFound
+                return $null
+            }
+        } catch {
+            Write-Host "$($UserMessages.azureSubscriptionException): $($_.Exception.Message)"
+            return $null
         }
-    }
-    Catch {
-        $errorMessage = $UserMessages.azureSubscriptionException
-        $errorDetails = $_.Exception.Message
-        Write-Host $errorMessage +":" $errorDetails -ForegroundColor Red
+    } catch {
+        Write-Host "$($UserMessages.azureSubscriptionException): $($_.Exception.Message)"
         return $null
     }
 }
@@ -375,7 +406,7 @@ function Invoke_VirtualMachineConfiguration ($machines, $SubscriptionId, $access
     $DefenderForCloudServers = @()
     foreach ($machine in $machines) {
         $pricingUrl = "https://management.azure.com$($machine.id)/providers/Microsoft.Security/pricings/virtualMachines?api-version=2024-01-01"
-        Write-Host $UserMessages.processMachinesStart + $($machine.name) -ForegroundColor Blue
+        Write-Host $UserMessages.processMachinesStart $($machine.name) -ForegroundColor Blue
         try {
             # Get the pricing configuration for the Virtual Machine from Azure
             $pricingResponse = Invoke-RestMethod -Method Get -Uri $pricingUrl -Headers @{ Authorization = "Bearer $accessToken" } -ContentType "application/json" -TimeoutSec 120 -ErrorAction SilentlyContinue
@@ -694,7 +725,7 @@ function Export-HTMLReport {
 function Main {
 
     try {
-    #Get-RequiredParams
+    
     Import-RequiredModules # Import required modules
     Connect-AzureAccount # Connect to Azure account
     $AZaccessToken = Get-AzureAccessToken # Get Azure access token
